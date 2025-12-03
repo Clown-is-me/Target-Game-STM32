@@ -1,0 +1,483 @@
+/* Общие стили */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.container {
+    width: 100%;
+    max-width: 1200px;
+    background-color: rgba(0, 10, 20, 0.8);
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    border: 1px solid rgba(76, 201, 240, 0.1);
+}
+
+/* Шапка */
+.header {
+    text-align: center;
+    padding: 25px;
+    background: linear-gradient(90deg, rgba(12, 36, 97, 0.9) 0%, rgba(76, 201, 240, 0.7) 100%);
+    border-bottom: 2px solid rgba(76, 201, 240, 0.3);
+}
+
+.header h1 {
+    font-size: 2.8rem;
+    margin-bottom: 10px;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(76, 201, 240, 0.7);
+}
+
+.header .subtitle {
+    font-size: 1.2rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Основной контент */
+.main-content {
+    padding: 25px;
+}
+
+/* Информация об игре */
+.game-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.stats {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.stat-box {
+    background: rgba(20, 30, 48, 0.9);
+    border-radius: 10px;
+    padding: 15px 25px;
+    min-width: 140px;
+    text-align: center;
+    border: 1px solid rgba(76, 201, 240, 0.2);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.stat-label {
+    display: block;
+    font-size: 1rem;
+    color: #4cc9f0;
+    margin-bottom: 5px;
+}
+
+.stat-value {
+    display: block;
+    font-size: 2rem;
+    font-weight: bold;
+    color: #fff;
+}
+
+/* Панель управления */
+.controls-panel {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.control-mode {
+    background: rgba(20, 30, 48, 0.9);
+    border-radius: 10px;
+    padding: 15px;
+    border: 1px solid rgba(76, 201, 240, 0.2);
+}
+
+.control-mode h3 {
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+    color: #4cc9f0;
+}
+
+.mode-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.mode-btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(40, 60, 80, 0.8);
+    color: #aaa;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mode-btn.active {
+    background: linear-gradient(90deg, #4cc9f0, #4361ee);
+    color: white;
+    box-shadow: 0 0 10px rgba(76, 201, 240, 0.5);
+}
+
+.mode-btn:not(.disabled):hover {
+    transform: translateY(-2px);
+}
+
+.mode-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.com-status {
+    font-size: 0.9rem;
+    padding: 8px;
+    border-radius: 5px;
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid rgba(220, 53, 69, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.com-status i {
+    color: #dc3545;
+}
+
+/* Кнопки */
+.btn {
+    padding: 12px 25px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.btn-primary {
+    background: linear-gradient(90deg, #4cc9f0, #4361ee);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 7px 15px rgba(76, 201, 240, 0.4);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-3px);
+}
+
+/* Игровая область */
+.game-area {
+    display: flex;
+    gap: 25px;
+    flex-wrap: wrap;
+}
+
+.game-field {
+    flex: 1;
+    min-height: 500px;
+    background: rgba(10, 20, 40, 0.9);
+    border-radius: 15px;
+    position: relative;
+    overflow: hidden;
+    border: 2px solid rgba(76, 201, 240, 0.2);
+    min-width: 300px;
+}
+
+/* Прицел */
+.crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    pointer-events: none;
+    z-index: 100;
+    transition: left 0.1s linear;
+}
+
+.crosshair-line {
+    position: absolute;
+    background-color: #4cc9f0;
+    box-shadow: 0 0 5px rgba(76, 201, 240, 0.8);
+}
+
+.crosshair-line.horizontal {
+    width: 40px;
+    height: 2px;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+}
+
+.crosshair-line.vertical {
+    width: 2px;
+    height: 40px;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+}
+
+.crosshair-dot {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background-color: #ff4757;
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 10px rgba(255, 71, 87, 0.8);
+}
+
+/* Мишени */
+.target {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #ff4757 0%, #b33939 100%);
+    box-shadow: 0 0 20px rgba(255, 71, 87, 0.7);
+    cursor: pointer;
+    transition: transform 0.2s, opacity 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 1.2rem;
+    z-index: 10;
+}
+
+.target:hover {
+    transform: scale(1.05);
+}
+
+.target.hit {
+    animation: targetHit 0.5s forwards;
+}
+
+@keyframes targetHit {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.3);
+        opacity: 0.7;
+    }
+    100% {
+        transform: scale(0);
+        opacity: 0;
+    }
+}
+
+/* Инструкции */
+.instructions {
+    width: 300px;
+    background: rgba(20, 30, 48, 0.9);
+    border-radius: 15px;
+    padding: 20px;
+    border: 1px solid rgba(76, 201, 240, 0.2);
+}
+
+.instructions h3 {
+    color: #4cc9f0;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.instructions-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.instruction {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.key {
+    background: rgba(76, 201, 240, 0.2);
+    border: 1px solid #4cc9f0;
+    padding: 8px 15px;
+    border-radius: 8px;
+    min-width: 70px;
+    text-align: center;
+    font-weight: bold;
+    color: #4cc9f0;
+}
+
+.game-state {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 15px;
+    border-radius: 10px;
+}
+
+#game-state-text {
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+    color: #4cc9f0;
+    font-weight: bold;
+}
+
+.crosshair-state {
+    font-size: 0.9rem;
+    color: #aaa;
+    font-style: italic;
+}
+
+/* Подвал */
+.footer {
+    text-align: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-top: 1px solid rgba(76, 201, 240, 0.1);
+    font-size: 0.9rem;
+    color: #aaa;
+}
+
+.footer .version {
+    margin-top: 5px;
+    font-size: 0.8rem;
+    color: #666;
+}
+
+/* Модальное окно */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background: linear-gradient(135deg, #0f2027 0%, #203a43 100%);
+    border-radius: 20px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    text-align: center;
+    border: 2px solid rgba(76, 201, 240, 0.3);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5);
+}
+
+.modal-content h2 {
+    color: #4cc9f0;
+    margin-bottom: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+}
+
+.results-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.result-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: rgba(20, 30, 48, 0.9);
+    border-radius: 10px;
+    border: 1px solid rgba(76, 201, 240, 0.2);
+}
+
+.result-label {
+    font-size: 1.2rem;
+    color: #4cc9f0;
+}
+
+.result-value {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #fff;
+}
+
+/* Адаптивность */
+@media (max-width: 900px) {
+    .game-area {
+        flex-direction: column;
+    }
+    
+    .instructions {
+        width: 100%;
+    }
+    
+    .game-info {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .stats {
+        justify-content: center;
+    }
+    
+    .controls-panel {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 600px) {
+    .header h1 {
+        font-size: 2rem;
+    }
+    
+    .game-field {
+        min-height: 400px;
+    }
+    
+    .stat-box {
+        min-width: 120px;
+        padding: 10px 15px;
+    }
+}

@@ -1,4 +1,3 @@
-// Основной игровой класс с правильным управлением клавиатурой
 class ShipGame {
     constructor() {
         // Игровые параметры
@@ -14,10 +13,10 @@ class ShipGame {
         this.crosshairVerticalSpeed = 3;
         this.crosshairVerticalDirection = 1;
         
-        // Управление
+        // Управление (используется InputHandler)
         this.moveLeft = false;
         this.moveRight = false;
-        this.spacePressed = false;
+        this.keyboardEnabled = true;
         
         // Типы кораблей и их очки
         this.shipTypes = [
@@ -53,10 +52,8 @@ class ShipGame {
         this.shipSpawnTimer = null;
         this.gameLoop = null;
         
-        // Привязка контекста
+        // Привязка контекста только для тех методов, которые существуют
         this.updateFieldSize = this.updateFieldSize.bind(this);
-        this.handleKeyDown = this.handleKeyDown.bind(this);
-        this.handleKeyUp = this.handleKeyUp.bind(this);
         
         this.init();
     }
@@ -65,17 +62,6 @@ class ShipGame {
         // Обновляем размеры поля
         window.addEventListener('resize', this.updateFieldSize);
         this.updateFieldSize();
-        
-        // Обработчики клавиатуры
-        document.addEventListener('keydown', this.handleKeyDown);
-        document.addEventListener('keyup', this.handleKeyUp);
-        
-        // Запрещаем стандартное поведение для игровых клавиш
-        document.addEventListener('keydown', (e) => {
-            if (['Space', 'KeyA', 'KeyD', 'Escape'].includes(e.code)) {
-                e.preventDefault();
-            }
-        });
         
         // Устанавливаем начальное положение прицела
         this.resetCrosshair();
@@ -86,6 +72,19 @@ class ShipGame {
         // Логирование
         this.logMessage('Система инициализирована');
         this.logMessage('Гарнизон готов к патрулю');
+    }
+
+    enableKeyboard() {
+        this.keyboardEnabled = true;
+        this.logMessage('Клавиатурное управление включено');
+    }
+
+    disableKeyboard() {
+        this.keyboardEnabled = false;
+        // Сбрасываем состояния клавиш
+        this.moveLeft = false;
+        this.moveRight = false;
+        this.logMessage('Клавиатурное управление отключено');
     }
     
     startGameLoop() {
@@ -302,60 +301,23 @@ class ShipGame {
         this.ships = [];
     }
     
-    // ОБРАБОТКА КЛАВИАТУРЫ
-    handleKeyDown(event) {
-        // Игнорируем повторные нажатия
-        if (event.repeat) return;
-        
-        switch(event.code) {
-            case 'KeyA':
-                this.moveLeft = true;
-                break;
-            case 'KeyD':
-                this.moveRight = true;
-                break;
-            case 'Space':
-                if (!this.spacePressed) {
-                    if (this.gameActive && !this.gamePaused) {
-                        if (!this.crosshairLocked) {
-                            this.lockCrosshair();
-                        } else {
-                            this.fire();
-                        }
-                    }
-                    this.spacePressed = true;
-                }
-                break;
-            case 'Escape':
-                if (this.gameActive) {
-                    this.pauseGame();
-                }
-                break;
-        }
-    }
-    
-    handleKeyUp(event) {
-        switch(event.code) {
-            case 'KeyA':
-                this.moveLeft = false;
-                break;
-            case 'KeyD':
-                this.moveRight = false;
-                break;
-            case 'Space':
-                this.spacePressed = false;
-                break;
-        }
-    }
-    
+    // Исправленный метод updateCrosshairPosition
     updateCrosshairPosition() {
         if (!this.gameActive || this.gamePaused || this.crosshairLocked) return;
         
+        // Проверяем, нужно ли двигать прицел
+        let shouldMove = false;
         let moveDirection = 0;
-        if (this.moveLeft && !this.moveRight) moveDirection = -1;
-        if (this.moveRight && !this.moveLeft) moveDirection = 1;
         
-        if (moveDirection !== 0) {
+        if (this.moveLeft && !this.moveRight) {
+            moveDirection = -1;
+            shouldMove = true;
+        } else if (this.moveRight && !this.moveLeft) {
+            moveDirection = 1;
+            shouldMove = true;
+        }
+        
+        if (shouldMove) {
             const currentLeft = parseInt(this.crosshair.style.left) || this.fieldWidth / 2;
             const newLeft = currentLeft + (moveDirection * this.crosshairSpeed);
             

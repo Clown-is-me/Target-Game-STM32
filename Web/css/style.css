@@ -942,3 +942,225 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* Дополнительные стили для COM-подключения */
+.com-connect-btn {
+    margin-left: auto;
+    padding: 8px 16px;
+    background: rgba(130, 185, 191, 0.1);
+    border: 1px solid var(--border-medium);
+    border-radius: 10px;
+    font-size: 0.9rem;
+    color: var(--text-dark);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.com-connect-btn:hover {
+    background: rgba(130, 185, 191, 0.2);
+    border-color: var(--accent-teal);
+}
+
+.com-connect-btn.connected {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: #4CAF50;
+    color: #4CAF50;
+}
+
+.com-connect-btn.connecting {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: #FFC107;
+    color: #FFC107;
+}
+
+.control-mode-btn {
+    padding: 10px 20px;
+    border: 1.5px solid var(--border-light);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--text-light);
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-mode-btn.active {
+    background: rgba(130, 185, 191, 0.1);
+    border-color: var(--accent-teal);
+    color: var(--text-dark);
+    font-weight: 500;
+}
+
+.control-mode-btn:hover:not(.disabled) {
+    border-color: var(--accent-teal);
+    background: rgba(130, 185, 191, 0.05);
+    transform: translateY(-1px);
+}
+
+.control-mode-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.mode-selector {
+    display: flex;
+    gap: 12px;
+}
+
+.com-device-info {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Анимация спиннера */
+.fa-spinner {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.com-connect-btn {
+    margin-left: auto;
+    padding: 8px 16px;
+    background: rgba(130, 185, 191, 0.1);
+    border: 1px solid var(--border-medium);
+    border-radius: 10px;
+    font-size: 0.9rem;
+    color: var(--text-dark);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+.com-connect-btn:hover {
+    background: rgba(130, 185, 191, 0.2);
+    border-color: var(--accent-teal);
+}
+
+.com-connect-btn.connected {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: #4CAF50;
+    color: #4CAF50;
+}
+
+.com-connect-btn.connecting {
+    background: rgba(255, 193, 7, 0.1);
+    border-color: #FFC107;
+    color: #FFC107;
+}
+
+.control-mode-btn {
+    padding: 10px 20px;
+    border: 1.5px solid var(--border-light);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--text-light);
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-mode-btn.active {
+    background: rgba(130, 185, 191, 0.1);
+    border-color: var(--accent-teal);
+    color: var(--text-dark);
+    font-weight: 500;
+}
+
+.control-mode-btn:hover:not(.disabled) {
+    border-color: var(--accent-teal);
+    background: rgba(130, 185, 191, 0.05);
+    transform: translateY(-1px);
+}
+
+.mode-selector {
+    display: flex;
+    gap: 12px;
+}
+
+.com-device-info {
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: var(--text-light);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Уведомления */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: white;
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 10000;
+    transform: translateX(150%);
+    transition: transform 0.3s ease;
+    max-width: 400px;
+    border-left: 4px solid var(--accent-teal);
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification i {
+    font-size: 1.2rem;
+}
+
+.notification-error {
+    border-left-color: #F44336;
+}
+
+.notification-error i {
+    color: #F44336;
+}
+
+.notification-success {
+    border-left-color: #4CAF50;
+}
+
+.notification-success i {
+    color: #4CAF50;
+}
+
+.notification-info {
+    border-left-color: var(--accent-teal);
+}
+
+.notification-info i {
+    color: var(--accent-teal);
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    color: var(--text-light);
+    cursor: pointer;
+    padding: 4px;
+    margin-left: auto;
+}

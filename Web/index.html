@@ -3,129 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Игра: Мишень</title>
+    <title>Морские Цели</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/medusas.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Пузырьки -->
+    <div id="bubbles-container"></div>
+    
     <div class="container">
-        <header class="header">
-            <h1><i class="fas fa-crosshairs"></i> Игра "Мишень"</h1>
-            <p class="subtitle">Тренируйте меткость и реакцию</p>
-        </header>
-
-        <main class="main-content">
-            <div class="game-info">
-                <div class="stats">
-                    <div class="stat-box">
-                        <span class="stat-label">Счет:</span>
-                        <span id="score" class="stat-value">0</span>
-                    </div>
-                    <div class="stat-box">
-                        <span class="stat-label">Мишени:</span>
-                        <span id="targets-hit" class="stat-value">0/10</span>
-                    </div>
-                    <div class="stat-box">
-                        <span class="stat-label">Время:</span>
-                        <span id="time" class="stat-value">60с</span>
-                    </div>
-                </div>
-
-                <div class="controls-panel">
-                    <div class="control-mode">
-                        <h3>Режим управления:</h3>
-                        <div class="mode-selector">
-                            <button id="keyboard-mode" class="mode-btn active">
-                                <i class="fas fa-keyboard"></i> Клавиатура
-                            </button>
-                            <button id="com-mode" class="mode-btn disabled" disabled>
-                                <i class="fas fa-microchip"></i> COM-устройство
-                            </button>
-                        </div>
-                        <div id="com-status" class="com-status">
-                            <i class="fas fa-times-circle"></i> COM-устройство не подключено
-                        </div>
-                    </div>
-
-                    <button id="start-btn" class="btn btn-primary">
-                        <i class="fas fa-play"></i> Начать игру
-                    </button>
-                    <button id="reset-btn" class="btn btn-secondary">
-                        <i class="fas fa-redo"></i> Сбросить
-                    </button>
-                </div>
+        <!-- Блок выбора управления -->
+        <div class="control-mode-panel">
+            <h3><i class="fas fa-sliders-h"></i> Режим управления:</h3>
+            <div class="mode-selector">
+                <button id="keyboard-mode" class="mode-btn active">
+                    <i class="fas fa-keyboard"></i> Клавиатура
+                </button>
+                <button id="com-mode" class="mode-btn disabled" disabled>
+                    <i class="fas fa-microchip"></i> COM-устройство
+                </button>
             </div>
+            <div id="com-status" class="com-status">
+                <i class="fas fa-times-circle"></i> COM-устройство не подключено
+            </div>
+        </div>
 
-            <div class="game-area">
-                <div id="game-field" class="game-field">
-                    <div id="crosshair" class="crosshair">
-                        <div class="crosshair-line horizontal"></div>
-                        <div class="crosshair-line vertical"></div>
-                        <div class="crosshair-dot"></div>
-                    </div>
-                    <!-- Мишени будут добавляться динамически -->
+        <div class="game-area">
+            <!-- Левая панель: Инструкции -->
+            <div class="panel left-panel">
+                <div class="panel-header">
+                    <i class="fas fa-book-open"></i>
+                    <h3>Инструкция капитана</h3>
                 </div>
-
                 <div class="instructions">
-                    <h3><i class="fas fa-info-circle"></i> Управление:</h3>
-                    <div class="instructions-content">
-                        <div class="instruction">
-                            <span class="key">A</span>
-                            <span>Движение влево</span>
-                        </div>
-                        <div class="instruction">
-                            <span class="key">D</span>
-                            <span>Движение вправо</span>
-                        </div>
-                        <div class="instruction">
-                            <span class="key">ПРОБЕЛ</span>
-                            <span>1 раз - зафиксировать позицию<br>2 раз - выстрел</span>
-                        </div>
-                        <div class="instruction">
-                            <span class="key">ESC</span>
-                            <span>Пауза / Продолжить</span>
+                    <div class="instruction">
+                        <div class="key-icon">A</div>
+                        <div class="instruction-text">
+                            <span class="command">Движение влево</span>
+                            <span class="description">Удерживайте клавишу A</span>
                         </div>
                     </div>
-                    <div class="game-state">
-                        <p id="game-state-text">Ожидание начала игры</p>
-                        <p id="crosshair-state" class="crosshair-state">Прицел свободен</p>
+                    <div class="instruction">
+                        <div class="key-icon">D</div>
+                        <div class="instruction-text">
+                            <span class="command">Движение вправо</span>
+                            <span class="description">Удерживайте клавишу D</span>
+                        </div>
+                    </div>
+                    <div class="instruction">
+                        <div class="key-icon">SPACE</div>
+                        <div class="instruction-text">
+                            <span class="command">Фиксация и выстрел</span>
+                            <span class="description">Нажмите ПРОБЕЛ</span>
+                        </div>
+                    </div>
+                    <div class="instruction">
+                        <div class="key-icon">ESC</div>
+                        <div class="instruction-text">
+                            <span class="command">Пауза</span>
+                            <span class="description">Приостановить игру</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="ship-types">
+                    <h4><i class="fas fa-ship"></i> Обнаруженные суда:</h4>
+                    <div class="ship-type">
+                        <div class="ship-preview small">
+                            <img src="assets/ship-small.png" alt="Шхуна">
+                        </div>
+                        <div class="ship-info">
+                            <span class="ship-name">Шхуна</span>
+                            <span class="ship-points">+10 очков</span>
+                        </div>
+                    </div>
+                    <div class="ship-type">
+                        <div class="ship-preview medium">
+                            <img src="assets/ship-medium.png" alt="Шхуна">
+                        </div>
+                        <div class="ship-info">
+                            <span class="ship-name">Бриг</span>
+                            <span class="ship-points">+20 очков</span>
+                        </div>
+                    </div>
+                    <div class="ship-type">
+                        <div class="ship-preview large">
+                            <img src="assets/ship-large.png" alt="Шхуна">
+                        </div>
+                        <div class="ship-info">
+                            <span class="ship-name">Фрегат</span>
+                            <span class="ship-points">+30 очков</span>
+                        </div>
                     </div>
                 </div>
             </div>
-        </main>
 
-        <footer class="footer">
-            <p>Игра разработана для будущей интеграции с COM-устройством (STM32)</p>
-            <p class="version">Версия: 1.0 (Режим клавиатуры)</p>
-        </footer>
+            <!-- Центральная область: Игровое поле с волнами -->
+            <div class="game-center">
+                <div class="game-field-container">                                       
+                    <div id="game-field" class="game-field">
+                        <!-- Прицел -->
+                        <div id="crosshair" class="crosshair">
+                            <div class="crosshair-inner">
+                                <div class="crosshair-circle"></div>
+                                <div class="crosshair-dot"></div>
+                            </div>
+                        </div>
+                        <!-- Корабли будут добавляться динамически -->
+                    </div>
+                </div>
+                
+                <!-- Блок логирования -->
+                <div class="log-panel">
+                    <div class="log-header">
+                        <i class="fas fa-scroll"></i>
+                        <h4>Бортовой журнал</h4>
+                        <button class="log-clear"><i class="fas fa-trash-alt"></i></button>
+                    </div>
+                    <div class="log-content">
+                        <div class="log-entry">[10:42] Гарнизон готов к патрулю</div>
+                        <div class="log-entry">[10:42] Начато патрулирование акватории</div>
+                        <div class="log-entry">[10:43] Обнаружена шхуна по курсу 245</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Правая панель: Статистика -->
+            <div class="panel right-panel">
+                <div class="panel-header">
+                    <i class="fas fa-chart-line"></i>
+                    <h3>Судовой журнал</h3>
+                </div>
+                
+                <div class="stats-compact">
+                    <div class="stat-compact">
+                        <div class="stat-label-compact">Счет</div>
+                        <div id="score" class="stat-value-compact">0</div>
+                    </div>
+                    <div class="stat-compact">
+                        <div class="stat-label-compact">Попадания</div>
+                        <div id="hits" class="stat-value-compact">0</div>
+                    </div>
+                    <div class="stat-compact">
+                        <div class="stat-label-compact">Выстрелы</div>
+                        <div id="shots" class="stat-value-compact">0</div>
+                    </div>
+                    <div class="stat-compact">
+                        <div class="stat-label-compact">Точность</div>
+                        <div id="accuracy" class="stat-value-compact">0%</div>
+                    </div>
+                    <div class="stat-compact">
+                        <div class="stat-label-compact">Время</div>
+                        <div id="time" class="stat-value-compact">60с</div>
+                    </div>
+                </div>
+                
+                <div class="game-controls">
+                    <button id="start-btn" class="btn-control start">
+                        <i class="fas fa-play"></i>
+                        <span>Начать патруль</span>
+                    </button>
+                    <button id="reset-btn" class="btn-control reset">
+                        <i class="fas fa-redo"></i>
+                        <span>Новый патруль</span>
+                    </button>
+                </div>
+                
+                <div class="game-status">
+                    <div class="status-indicator">
+                        <div class="status-light"></div>
+                        <span id="game-state-text">Ожидание</span>
+                    </div>
+                    <div id="crosshair-state" class="crosshair-state">
+                        <i class="fas fa-crosshairs"></i>
+                        <span>Прицел свободен</span>
+                    </div>
+                </div>
+                
+                <div class="timer-container">
+                    <div class="timer-bar">
+                        <div id="timer-progress" class="timer-progress"></div>
+                    </div>
+                    <div class="timer-labels">
+                        <span>0с</span>
+                        <span id="time-display">60с</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <!-- Модальное окно для результатов -->
+    <!-- Модальное окно результатов -->
     <div id="results-modal" class="modal">
+        <div class="modal-overlay"></div>
         <div class="modal-content">
-            <h2><i class="fas fa-trophy"></i> Результаты игры</h2>
-            <div class="results-stats">
-                <div class="result-stat">
-                    <span class="result-label">Попадания:</span>
-                    <span id="final-score" class="result-value">0</span>
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fas fa-anchor"></i>
+                    <h2>Патруль завершен</h2>
                 </div>
-                <div class="result-stat">
-                    <span class="result-label">Точность:</span>
-                    <span id="accuracy" class="result-value">0%</span>
-                </div>
-                <div class="result-stat">
-                    <span class="result-label">Время:</span>
-                    <span id="final-time" class="result-value">0с</span>
+                <div id="rank-badge" class="rank-badge">
+                    <span class="rank-title">Матрос</span>
                 </div>
             </div>
-            <button id="close-results" class="btn btn-primary">Закрыть</button>
+            
+            <div class="modal-body">
+                <div class="results-grid">
+                    <div class="result-item">
+                        <div class="result-icon"><i class="fas fa-star"></i></div>
+                        <div class="result-info">
+                            <div class="result-label">Общий счет</div>
+                            <div id="final-score" class="result-value">0</div>
+                        </div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-icon"><i class="fas fa-bullseye"></i></div>
+                        <div class="result-info">
+                            <div class="result-label">Точность</div>
+                            <div id="final-accuracy" class="result-value">0%</div>
+                        </div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-icon"><i class="fas fa-ship"></i></div>
+                        <div class="result-info">
+                            <div class="result-label">Потоплено судов</div>
+                            <div id="final-hits" class="result-value">0</div>
+                        </div>
+                    </div>
+                    <div class="result-item">
+                        <div class="result-icon"><i class="fas fa-clock"></i></div>
+                        <div class="result-info">
+                            <div class="result-label">Время патруля</div>
+                            <div id="final-time" class="result-value">0с</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button id="close-results" class="btn-modal">
+                    <i class="fas fa-check"></i>
+                    <span>Вернуться в док</span>
+                </button>
+            </div>
         </div>
     </div>
 
     <script src="js/game.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/input.js"></script>
-    <script src="js/com-interface.js"></script>
+    <script src="js/medusas.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

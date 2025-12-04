@@ -6,10 +6,8 @@ class GameUI {
         // Элементы UI
         this.startBtn = document.getElementById('start-btn');
         this.resetBtn = document.getElementById('reset-btn');
-        this.keyboardModeBtn = document.getElementById('keyboard-mode');
-        this.comModeBtn = document.getElementById('com-mode');
-        this.comStatus = document.getElementById('com-status');
         this.closeResultsBtn = document.getElementById('close-results');
+        this.shareResultsBtn = document.getElementById('share-results');
         this.resultsModal = document.getElementById('results-modal');
         
         this.init();
@@ -20,32 +18,28 @@ class GameUI {
         this.startBtn.addEventListener('click', () => {
             if (!this.game.gameActive) {
                 this.game.startGame();
-                this.startBtn.innerHTML = '<i class="fas fa-pause"></i> Пауза';
+                this.startBtn.innerHTML = '<i class="fas fa-pause"></i> Причалить';
             } else {
                 this.game.pauseGame();
                 this.startBtn.innerHTML = this.game.gamePaused ? 
-                    '<i class="fas fa-play"></i> Продолжить' : 
-                    '<i class="fas fa-pause"></i> Пауза';
+                    '<i class="fas fa-play"></i> Сняться с якоря' : 
+                    '<i class="fas fa-pause"></i> Причалить';
             }
         });
         
         this.resetBtn.addEventListener('click', () => {
             this.game.resetGame();
-            this.startBtn.innerHTML = '<i class="fas fa-play"></i> Начать игру';
-        });
-        
-        // Переключение режимов управления
-        this.keyboardModeBtn.addEventListener('click', () => {
-            this.setControlMode('keyboard');
-        });
-        
-        this.comModeBtn.addEventListener('click', () => {
-            this.setControlMode('com');
+            this.startBtn.innerHTML = '<i class="fas fa-play"></i> Начать патруль';
         });
         
         // Закрытие модального окна с результатами
         this.closeResultsBtn.addEventListener('click', () => {
             this.resultsModal.style.display = 'none';
+        });
+        
+        // Кнопка "Поделиться"
+        this.shareResultsBtn.addEventListener('click', () => {
+            this.shareResults();
         });
         
         // Закрытие модального окна при клике вне его
@@ -56,46 +50,28 @@ class GameUI {
         });
     }
     
-    setControlMode(mode) {
-        if (mode === 'keyboard') {
-            this.keyboardModeBtn.classList.add('active');
-            this.comModeBtn.classList.remove('active');
-            
-            // В реальном приложении здесь будет переключение логики управления
-            console.log('Режим управления: Клавиатура');
-        } else if (mode === 'com') {
-            // Проверяем, доступно ли COM-устройство
-            if (this.comModeBtn.classList.contains('disabled')) {
-                alert('COM-устройство не подключено. Используйте режим клавиатуры.');
-                return;
-            }
-            
-            this.comModeBtn.classList.add('active');
-            this.keyboardModeBtn.classList.remove('active');
-            
-            // В реальном приложении здесь будет переключение на управление через COM
-            console.log('Режим управления: COM-устройство');
-        }
-    }
-    
-    updateComStatus(connected, deviceName = '') {
-        if (connected) {
-            this.comStatus.innerHTML = `<i class="fas fa-check-circle"></i> COM-устройство подключено: ${deviceName}`;
-            this.comStatus.style.background = 'rgba(40, 167, 69, 0.2)';
-            this.comStatus.style.borderColor = 'rgba(40, 167, 69, 0.3)';
-            this.comModeBtn.classList.remove('disabled');
-            this.comModeBtn.disabled = false;
+    shareResults() {
+        const score = document.getElementById('final-score').textContent;
+        const accuracy = document.getElementById('final-accuracy').textContent;
+        const rank = document.getElementById('rank').textContent;
+        
+        const text = `🏆 Я только что завершил морской патруль в игре "Морская Охотничья Застава"!
+🎯 Счёт: ${score}
+🎯 Точность: ${accuracy}
+⚓ Звание: ${rank}
+🚢 Сможешь побить мой рекорд?`;
+
+        if (navigator.share) {
+            navigator.share({
+                title: 'Мой результат в Морской Охотничьей Заставе',
+                text: text,
+                url: window.location.href
+            });
         } else {
-            this.comStatus.innerHTML = '<i class="fas fa-times-circle"></i> COM-устройство не подключено';
-            this.comStatus.style.background = 'rgba(220, 53, 69, 0.2)';
-            this.comStatus.style.borderColor = 'rgba(220, 53, 69, 0.3)';
-            this.comModeBtn.classList.add('disabled');
-            this.comModeBtn.disabled = true;
-            
-            // Если был активен COM-режим, переключаемся на клавиатуру
-            if (this.comModeBtn.classList.contains('active')) {
-                this.setControlMode('keyboard');
-            }
+            // Копируем в буфер обмена
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Результаты скопированы в буфер обмена! Поделитесь ими с друзьями.');
+            });
         }
     }
 }

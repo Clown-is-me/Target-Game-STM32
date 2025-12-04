@@ -1,0 +1,27 @@
+--cpu Cortex-M3
+"test_bizzer\startup_stm32f103xb.o"
+"test_bizzer\main.o"
+"test_bizzer\gpio.o"
+"test_bizzer\tim.o"
+"test_bizzer\usart.o"
+"test_bizzer\stm32f1xx_it.o"
+"test_bizzer\stm32f1xx_hal_msp.o"
+"test_bizzer\stm32f1xx_hal_gpio_ex.o"
+"test_bizzer\stm32f1xx_hal_tim.o"
+"test_bizzer\stm32f1xx_hal_tim_ex.o"
+"test_bizzer\stm32f1xx_hal.o"
+"test_bizzer\stm32f1xx_hal_rcc.o"
+"test_bizzer\stm32f1xx_hal_rcc_ex.o"
+"test_bizzer\stm32f1xx_hal_gpio.o"
+"test_bizzer\stm32f1xx_hal_dma.o"
+"test_bizzer\stm32f1xx_hal_cortex.o"
+"test_bizzer\stm32f1xx_hal_pwr.o"
+"test_bizzer\stm32f1xx_hal_flash.o"
+"test_bizzer\stm32f1xx_hal_flash_ex.o"
+"test_bizzer\stm32f1xx_hal_exti.o"
+"test_bizzer\stm32f1xx_hal_uart.o"
+"test_bizzer\system_stm32f1xx.o"
+--strict --scatter "test_bizzer\test_bizzer.sct"
+--summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
+--info sizes --info totals --info unused --info veneers
+--list "test_bizzer.map" -o test_bizzer\test_bizzer.axf

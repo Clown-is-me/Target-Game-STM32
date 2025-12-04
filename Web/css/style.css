@@ -100,7 +100,7 @@ body {
 
 .mode-btn.disabled {
     opacity: 0.4;
-    cursor: not-allowed;
+    /* cursor: not-allowed; */
 }
 
 .com-status {

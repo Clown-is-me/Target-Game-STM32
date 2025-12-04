@@ -1,128 +1,157 @@
-/* Стили для медуз */
+/* ===== СТИЛИ ДЛЯ МЕДУЗ НА ФОНЕ ===== */
+#bubbles-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: -1; /* Фон */
+}
+
 .medusa {
     position: absolute;
     pointer-events: none;
-    z-index: 0;
-    opacity: 0.6;
-    filter: blur(0.5px);
+    filter: blur(1.2px);
+    will-change: transform, opacity;
+    mix-blend-mode: screen; /* Плавное наложение */
 }
 
 /* Разные размеры медуз */
 .medusa-small {
-    width: 40px;
-    height: 40px;
-}
-
-.medusa-medium {
     width: 60px;
-    height: 60px;
-}
-
-.medusa-large {
-    width: 80px;
     height: 80px;
 }
 
-/* Купол медузы (полупрозрачный) */
+.medusa-medium {
+    width: 90px;
+    height: 120px;
+}
+
+.medusa-large {
+    width: 120px;
+    height: 160px;
+}
+
+/* Совершенно новая форма медузы - мягкая и органичная */
 .medusa::before {
     content: '';
     position: absolute;
-    top: 0;
+    top: 10%;
     left: 50%;
     transform: translateX(-50%);
-    width: 70%;
-    height: 70%;
+    width: 90%;
+    height: 60%;
     background: radial-gradient(
-        circle at 50% 30%,
-        rgba(255, 230, 200, 0.7) 0%,
-        rgba(255, 210, 180, 0.4) 50%,
-        rgba(255, 190, 160, 0.1) 100%
+        ellipse at 50% 40%,
+        var(--medusa-color-1) 0%,
+        var(--medusa-color-2) 40%,
+        var(--medusa-color-3) 70%,
+        transparent 90%
     );
-    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+    border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
     box-shadow: 
-        inset 0 -5px 10px rgba(255, 200, 170, 0.3),
-        0 2px 5px rgba(0, 0, 0, 0.1);
+        inset 0 5px 10px rgba(255, 255, 255, 0.3),
+        inset 0 -5px 10px rgba(200, 150, 100, 0.2);
 }
 
-/* Щупальца медузы */
+/* Мягкие волнистые щупальца */
 .medusa::after {
     content: '';
     position: absolute;
-    top: 70%;
+    top: 60%;
     left: 50%;
     transform: translateX(-50%);
-    width: 50%;
-    height: 60%;
+    width: 60%;
+    height: 50%;
     background: linear-gradient(
         to bottom,
-        rgba(255, 210, 180, 0.5) 0%,
-        rgba(255, 190, 160, 0.3) 30%,
-        rgba(255, 170, 140, 0.1) 100%
+        var(--medusa-tentacle-color) 0%,
+        rgba(255, 200, 170, 0.2) 60%,
+        transparent 100%
     );
-    border-radius: 50% / 100% 100% 0 0;
-    clip-path: polygon(
-        0% 0%,
-        100% 0%,
-        100% 100%,
-        90% 100%,
-        80% 70%,
-        70% 100%,
-        60% 70%,
-        50% 100%,
-        40% 70%,
-        30% 100%,
-        20% 70%,
-        10% 100%,
-        0% 100%
-    );
+    -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><path d="M20,0 Q30,20 40,10 Q50,0 60,20 Q70,40 80,30 Q90,20 100,40 L100,100 L0,100 L0,40 Q10,20 20,0Z" fill="white"/></svg>');
+    mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><path d="M20,0 Q30,20 40,10 Q50,0 60,20 Q70,40 80,30 Q90,20 100,40 L100,100 L0,100 L0,40 Q10,20 20,0Z" fill="white"/></svg>');
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    filter: blur(1.5px);
+    opacity: 0.6;
 }
 
-/* Эффект свечения */
+/* Эффект свечения - более мягкий */
 .medusa-glow {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 120%;
-    height: 120%;
+    width: 180%;
+    height: 180%;
     background: radial-gradient(
         circle,
-        rgba(255, 230, 200, 0.1) 0%,
-        rgba(255, 210, 180, 0.05) 40%,
-        transparent 70%
+        rgba(255, 230, 200, 0.15) 0%,
+        rgba(255, 210, 180, 0.08) 30%,
+        transparent 60%
     );
     border-radius: 50%;
     z-index: -1;
-    animation: pulse 4s ease-in-out infinite;
+    animation: gentleGlow 6s ease-in-out infinite alternate;
 }
 
-@keyframes pulse {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.5; }
+@keyframes gentleGlow {
+    0% { opacity: 0.1; transform: translate(-50%, -50%) scale(0.8); }
+    100% { opacity: 0.2; transform: translate(-50%, -50%) scale(1.1); }
 }
 
-/* Кластеры медуз */
+/* Кластеры медуз для боковых областей */
 .medusa-cluster {
     position: absolute;
-    width: 150px;
-    height: 150px;
+    width: 180px;
+    height: 180px;
+    z-index: -1;
+    filter: blur(1px);
 }
 
 .medusa-cluster .medusa-small {
     position: absolute;
+    filter: blur(1px) brightness(1.3);
+    opacity: 0.7;
 }
 
 .medusa-cluster .medusa-small:nth-child(1) {
     top: 20px;
-    left: 20px;
+    left: 15px;
+    transform: scale(0.9);
 }
 
 .medusa-cluster .medusa-small:nth-child(2) {
-    top: 50px;
-    left: 60px;
+    top: 60px;
+    left: 70px;
+    transform: scale(1.1);
 }
 
 .medusa-cluster .medusa-small:nth-child(3) {
     top: 10px;
-    left: 80px;
+    left: 100px;
+    transform: scale(0.8);
+}
+
+/* Дополнительный внутренний слой для объема */
+.medusa-inner {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 40%;
+    background: radial-gradient(
+        ellipse at 50% 50%,
+        rgba(255, 255, 255, 0.4) 0%,
+        rgba(255, 255, 255, 0.1) 60%,
+        transparent 100%
+    );
+    border-radius: 50%;
+    filter: blur(0.5px);
 }

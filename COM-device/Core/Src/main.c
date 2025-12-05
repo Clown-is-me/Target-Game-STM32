@@ -24,6 +24,7 @@
 #define PI 3.14159f
 #define DEBOUNCE_DELAY 200
 #define LOG_BUFFER_SIZE 256
+#define CMD_BUFFER_SIZE 32
 
 /* USER CODE END PD */
 
@@ -35,6 +36,7 @@
 
 /* USER CODE BEGIN PV */
 char log_ring_buffer[LOG_BUFFER_SIZE];
+volatile uint8_t uart_rx_byte; 
 volatile uint16_t log_write_idx = 0;
 volatile uint16_t log_read_idx = 0;
 volatile uint8_t log_pending = 0;
@@ -59,6 +61,13 @@ volatile uint32_t button_right_last_time = 0;
 volatile uint8_t crosshair_locked = 0;
 volatile uint32_t last_com_send_time = 0;
 volatile uint8_t middle_button_click_count = 0;
+													
+volatile uint8_t game_started = 0;
+volatile uint8_t game_paused = 0;
+													
+volatile char cmd_buffer[CMD_BUFFER_SIZE];
+volatile uint8_t cmd_index = 0;
+volatile uint8_t cmd_ready = 0;
 													
 /* USER CODE END PV */
 
@@ -256,6 +265,22 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 }
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART2) {
+        if (uart_rx_byte == '\n' || uart_rx_byte == '\r') {
+            if (cmd_index > 0) {
+                cmd_buffer[cmd_index] = '\0';
+                cmd_ready = 1;
+                cmd_index = 0;
+            }
+        } else {
+            if (cmd_index < CMD_BUFFER_SIZE - 1) {
+                cmd_buffer[cmd_index++] = uart_rx_byte;
+            }
+        }
+        HAL_UART_Receive_IT(&huart2, (uint8_t*)&uart_rx_byte, 1);
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -287,22 +312,54 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM2_Init();
   MX_USART2_UART_Init();
+	
   /* USER CODE BEGIN 2 */
 	HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
-	// USER CODE BEGIN 2
-
 	seg_minus = ~seg_minus;
 	seg_dot = ~seg_dot;
 
-  /* USER CODE END 2 */
+	HAL_UART_Receive_IT(&huart2, (uint8_t*)&uart_rx_byte, 1);
+	/* USER CODE END 2 */
 	HAL_TIM_Base_Start_IT(&htim2);
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1)
     {
-        /* USER CODE END WHILE */
+        
+			/* USER CODE END WHILE */
 				if (log_pending) {
 						process_logs();
+				}
+				
+				if (cmd_ready) {
+						cmd_ready = 0;
+						char *cmd = (char*)cmd_buffer;
+
+						if (cmd[0] == '\0') {
+								memset((void*)cmd_buffer, 0, CMD_BUFFER_SIZE);
+								continue;
+						}
+					
+						if (strncmp(cmd, "CMD:START", 9) == 0) {
+								game_started = 1;
+								game_paused = 0;
+								log_to_buffer("COM: START=%d, PAUSE = %d", game_started, game_paused);
+						}
+						else if (strncmp(cmd, "CMD:PAUSE", 9) == 0) {
+								game_started = 1; 
+								game_paused = 1;
+								log_to_buffer("COM: START=%d, PAUSE = %d", game_started, game_paused);
+						}
+						else if (strncmp(cmd, "CMD:RESET", 9) == 0) {
+								game_started = 0;
+								game_paused = 0;
+								log_to_buffer("COM: reset = 1 (start = 0, paused = 0)");
+						}
+						else {
+								log_to_buffer("COM: unknown cmd: %s", cmd);
+						}
+
+						memset((void*)cmd_buffer, 0, CMD_BUFFER_SIZE);
 				}
 				HAL_Delay(1);
         /* USER CODE BEGIN 3 */

@@ -569,6 +569,27 @@ class ShipGame {
         
         logContent.appendChild(logEntry);
         logContent.scrollTop = logContent.scrollHeight;
+
+        const systemKeywords = [
+            'Система инициализирована',
+            'Гарнизон готов',
+            'Начато патрулирование',
+            'Патруль приостановлен',
+            'Патруль возобновлен',
+            'Патруль завершен',
+            'Новый патруль подготовлен',
+            'Режим управления',
+            'COM',
+            'Курс зафиксирован',
+            'Журнал очищен',
+            'Ошибка'
+        ];
+
+        const isSystemMessage = systemKeywords.some(keyword => message.includes(keyword));
+
+        if (isSystemMessage) {
+            console.log(`[Журнал] ${message}`);
+        }
         
         // Ограничиваем количество записей
         const entries = logContent.querySelectorAll('.log-entry');

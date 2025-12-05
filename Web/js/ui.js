@@ -62,11 +62,13 @@ class GameUI {
         if (!this.game.gameActive) {
             this.game.startGame();
             this.startBtn.innerHTML = '<i class="fas fa-pause"></i> Пауза';
+            if (this.comInterface) this.comInterface.sendCommand('START');
         } else {
             this.game.pauseGame();
-            this.startBtn.innerHTML = this.game.gamePaused ? 
-                '<i class="fas fa-play"></i> Продолжить' : 
-                '<i class="fas fa-pause"></i> Пауза';
+            this.startBtn.innerHTML = this.game.gamePaused
+                ? '<i class="fas fa-play"></i> Продолжить'
+                : '<i class="fas fa-pause"></i> Пауза';
+            if (this.comInterface) this.comInterface.sendCommand(this.game.gamePaused ? 'PAUSE' : 'START');
         }
     }
 
@@ -74,6 +76,7 @@ class GameUI {
     handleResetClick() {
         this.game.resetGame();
         this.startBtn.innerHTML = '<i class="fas fa-play"></i> Начать патруль';
+        if (this.comInterface) this.comInterface.sendCommand('RESET');
     }
     
     setControlMode(mode) {

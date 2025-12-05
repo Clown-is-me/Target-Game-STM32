@@ -9,10 +9,10 @@ class COMInterface {
         this.bufferTimeout = null;
         this.BUFFER_TIMEOUT_MS = 50;
         this.handleData = this.handleData.bind(this);
-        this.handleLeftPress = this.handleLeftPress.bind(this);
-        this.handleLeftRelease = this.handleLeftRelease.bind(this);
-        this.handleRightPress = this.handleRightPress.bind(this);
-        this.handleRightRelease = this.handleRightRelease.bind(this);
+
+        this.handleLeftStep = this.handleLeftStep.bind(this);
+        this.handleRightStep = this.handleRightStep.bind(this);
+
         this.handleMiddleClick1 = this.handleMiddleClick1.bind(this);
         this.handleMiddleClick2 = this.handleMiddleClick2.bind(this);
         this.init();
@@ -158,52 +158,63 @@ class COMInterface {
                 this.game.updateTimeFromCom(seconds);
             }
         }
-        if (data === 'LEFT_PRESS') this.handleLeftPress();
-        else if (data === 'LEFT_RELEASE') this.handleLeftRelease();
-        else if (data === 'RIGHT_PRESS') this.handleRightPress();
-        else if (data === 'RIGHT_RELEASE') this.handleRightRelease();
+        else if (data.startsWith('SHIP:')) {
+            const parts = data.substring(5).split(',');
+            const type = parseInt(parts[0]);
+            const x = parseInt(parts[1]);
+            const y = parts[2] ? parseInt(parts[2]) : null;
+            if (!isNaN(type) && !isNaN(x) && this.game) {
+                this.game.addShipFromCom(type, x, y);
+            }
+        }
+        else if (data.startsWith('RESULT:')) {
+            const result = data.substring(7);
+            if (result === 'MISS') {
+                this.game.handleComMiss();
+            } else if (result.startsWith('HIT:')) {
+                const points = parseInt(result.substring(4));
+                if (!isNaN(points)) {
+                    this.game.handleComHit(points);
+                }
+            }
+        }
+        // Старые команды — для совместимости (можно удалить позже)
+        else if (data === 'CROSSHAIR_STEP_LEFT') this.handleLeftStep();
+        else if (data === 'CROSSHAIR_STEP_RIGHT') this.handleRightStep();
         else if (data === 'MIDDLE_CLICK_1') this.handleMiddleClick1();
         else if (data === 'MIDDLE_CLICK_2') this.handleMiddleClick2();
-        else if (data.startsWith('STATUS:')) this.handleStatus(data);
-        // Другие команды игнорируются
     }
 
-    handleLeftPress() {
+    handleLeftStep() {
         if (this.ui.controlMode === 'com' && this.game.gameActive && !this.game.gamePaused && !this.game.crosshairLocked) {
-            this.game.moveLeft = true;
-            this.game.moveRight = false;
-            this.game.logMessage('COM: Движение влево');
+            this.game.stepCrosshair(-1);
+            this.game.logMessage('COM: Шаг влево');
         }
     }
 
-    handleLeftRelease() {
-        if (this.ui.controlMode === 'com') this.game.moveLeft = false;
-    }
-
-    handleRightPress() {
+    handleRightStep() {
         if (this.ui.controlMode === 'com' && this.game.gameActive && !this.game.gamePaused && !this.game.crosshairLocked) {
-            this.game.moveRight = true;
-            this.game.moveLeft = false;
-            this.game.logMessage('COM: Движение вправо');
+            this.game.stepCrosshair(1);
+            this.game.logMessage('COM: Шаг вправо');
         }
-    }
-
-    handleRightRelease() {
-        if (this.ui.controlMode === 'com') this.game.moveRight = false;
     }
 
     handleMiddleClick1() {
-        if (this.ui.controlMode === 'com' && this.game.gameActive && !this.game.gamePaused && !this.game.crosshairLocked) {
-            this.game.lockCrosshair();
-            this.game.logMessage('COM: Прицел зафиксирован');
-        }
+        if (this.ui.controlMode !== 'com') return;
+        if (!this.game.gameActive || this.game.gamePaused) return;
+        if (this.game.crosshairLocked) return; // уже зафиксирован — не реагируем
+
+        this.game.lockCrosshair();
+        this.game.logMessage('COM: Прицел зафиксирован (вертикальное движение)');
     }
 
     handleMiddleClick2() {
-        if (this.ui.controlMode === 'com' && this.game.gameActive && !this.game.gamePaused && this.game.crosshairLocked) {
-            this.game.fire();
-            this.game.logMessage('COM: Выстрел произведён');
-        }
+        if (this.ui.controlMode !== 'com') return;
+        if (!this.game.gameActive || this.game.gamePaused) return;
+        if (!this.game.crosshairLocked) return; // выстрел только если зафиксирован
+
+        this.game.fire();
+        this.game.logMessage('COM: Выстрел произведён');
     }
 
     handleStatus(statusData) {

@@ -9,6 +9,7 @@
 #include "string.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -22,9 +23,20 @@
 /* USER CODE BEGIN PD */
 
 #define PI 3.14159f
-#define DEBOUNCE_DELAY 200
+#define DEBOUNCE_DELAY 20
 #define LOG_BUFFER_SIZE 256
 #define CMD_BUFFER_SIZE 32
+#define MAX_SHIPS 30
+#define FIELD_WIDTH 800
+#define FIELD_HEIGHT 600
+
+
+typedef struct {
+    uint8_t active;
+    uint8_t type;      // 10, 20, 30
+    uint16_t x;
+    uint16_t y;
+} Ship;
 
 /* USER CODE END PD */
 
@@ -71,6 +83,16 @@ volatile uint8_t game_time = 60;
 volatile uint32_t last_second_tick = 0;  
 volatile uint8_t display_on = 1;          
 volatile uint32_t last_blink_tick = 0;
+
+//volatile uint8_t left_button_was_pressed = 0;
+//volatile uint8_t right_button_was_pressed = 0;
+volatile uint8_t left_button_prev = 1;   // 1 = ???????? (?? ?????????)
+volatile uint8_t right_button_prev = 1;
+volatile uint8_t middle_button_prev = 1;
+volatile uint8_t middle_click_pending = 0; // ????: ?????? ???? ??????
+
+Ship ships[MAX_SHIPS] = {0};
+volatile uint32_t last_ship_spawn = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -188,72 +210,67 @@ void updateDisplay(void) {
         writeSegmentToDisplay(seg_nums[i], disp_buf[i]);
     }
 }
-void leftButtonHandler(){
-		uint32_t current_time = HAL_GetTick();
-    
-    if (current_time - button_left_last_time > DEBOUNCE_DELAY) {
-        button_left_last_time = current_time;
-        
-        if (HAL_GPIO_ReadPin(LEFT_BUTTON_GPIO_Port, LEFT_BUTTON_Pin) == GPIO_PIN_SET) {
-            // ?????? ????????
-            button_left_state = 0;
-            log_to_buffer("LEFT_RELEASE");
-        } else {
-            // ?????? ??????
-            button_left_state = 1;
-            log_to_buffer("LEFT_PRESS");
+
+uint32_t get_random(void) {
+    return HAL_GetTick() ^ (HAL_GetTick() << 5) ^ (HAL_GetTick() >> 3);
+}
+
+void spawn_ship(void) {
+    int free_slot = -1;
+    for (int i = 0; i < MAX_SHIPS; i++) {
+        if (!ships[i].active) {
+            free_slot = i;
+            break;
         }
     }
+    if (free_slot == -1) return; // ??? ?????
+
+    uint8_t type;
+    uint32_t r = get_random() % 100;
+    if (r < 50) {
+        type = 10; // ?????
+    } else if (r < 80) {
+        type = 20; // ????
+    } else {
+        type = 30; // ??????
+    }
+
+    uint16_t x = 40 + (get_random() % (FIELD_WIDTH - 80));   // 40..720
+    uint16_t y = 40 + (get_random() % (FIELD_HEIGHT - 140)); // 40..460
+
+    ships[free_slot].active = 1;
+    ships[free_slot].type = type;
+    ships[free_slot].x = x;
+    ships[free_slot].y = y;
+
+    log_to_buffer("SHIP:%d,%d,%d", type, x, y);
 }
-void middleButtonHandler(){
-		uint32_t current_time = HAL_GetTick();
-    
-    if (current_time - button_middle_last_time > DEBOUNCE_DELAY) {
-        button_middle_last_time = current_time;
-        
-        if (HAL_GPIO_ReadPin(MIDDLE_BUTTON_GPIO_Port, MIDDLE_BUTTON_Pin) == GPIO_PIN_SET) {
-            // ?????? ????????
-            button_middle_state = 0;
-            
-            // ??????? ??????
-            middle_button_click_count++;
-            
-            if (middle_button_click_count == 1) {
-                // ?????? ???? - ????????
-                crosshair_locked = 1;
-                log_to_buffer("MIDDLE_CLICK_1");
-            } else if (middle_button_click_count == 2) {
-                // ?????? ???? - ???????
-                log_to_buffer("MIDDLE_CLICK_2");
-                middle_button_click_count = 0;
-                crosshair_locked = 0;
+void check_ship_hit(uint16_t crosshair_x) {
+    int hit = 0;
+    uint8_t hit_type = 0;
+    int hit_index = -1;
+
+    for (int i = 0; i < MAX_SHIPS; i++) {
+        if (ships[i].active) {
+            if (crosshair_x >= ships[i].x - 30 && crosshair_x <= ships[i].x + 30) {
+                hit = 1;
+                hit_type = ships[i].type;
+                hit_index = i;
+                break;
             }
-        } else {
-            // ?????? ??????
-            button_middle_state = 1;
         }
+    }
+
+    if (hit) {
+        ships[hit_index].active = 0;
+        log_to_buffer("RESULT:HIT:%d", hit_type);
+    } else {
+        log_to_buffer("RESULT:MISS");
     }
 }
 
-void rightButtonHandler(){
-		uint32_t current_time = HAL_GetTick();
-    
-    if (current_time - button_right_last_time > DEBOUNCE_DELAY) {
-        button_right_last_time = current_time;
-        
-        if (HAL_GPIO_ReadPin(RIGHT_BUTTON_GPIO_Port, RIGHT_BUTTON_Pin) == GPIO_PIN_SET) {
-            // ?????? ????????
-            button_right_state = 0;
-            log_to_buffer("RIGHT_RELEASE");
-        } else {
-            // ?????? ??????
-            button_right_state = 1;
-            log_to_buffer("RIGHT_PRESS");
-        }
-    }
-}
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
-    switch (GPIO_Pin) {
+    /*switch (GPIO_Pin) {
         case LEFT_BUTTON_Pin: 
             leftButtonHandler();	
             break;
@@ -265,7 +282,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
         case RIGHT_BUTTON_Pin: 
             rightButtonHandler();
             break;
-    }
+    } */
 }
 
 
@@ -330,15 +347,18 @@ int main(void)
 	for (int i = 0; i < 4; i++) {
 			writeSegmentToDisplay(seg_nums[i], 0xFF);
 	}
-	HAL_Delay(10); // ????????? ?????
+	HAL_Delay(10);
 	HAL_TIM_Base_Start_IT(&htim2);
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 /* USER CODE BEGIN WHILE */
+	
+	uint32_t last_button_check = 0;
+	uint32_t last_second_tick = 0;
+	uint32_t last_blink_tick = 0;
 	while (1)
 	{
-			uint32_t current_time = HAL_GetTick(); // ?? ????????? ????? ? ?????? ?????
-
+			uint32_t current_time = HAL_GetTick(); 
 			/* USER CODE END WHILE */
 
 			// ????????? ?????
@@ -363,6 +383,14 @@ int main(void)
 							}
 							game_started = 1;
 							game_paused = 0;
+							
+							crosshair_locked = 0;
+							
+							for (int i = 0; i < MAX_SHIPS; i++) {
+									ships[i].active = 0;
+							}
+							last_ship_spawn = current_time;
+							spawn_ship();
 							log_to_buffer("COM: START=%d, PAUSE = %d", game_started, game_paused);
 							log_to_buffer("TIME:%d", game_time); 
 					}
@@ -375,15 +403,66 @@ int main(void)
 							game_started = 0;
 							game_paused = 0;
 							game_time = 60;
+						
+							crosshair_locked = 0;
+						
+							for (int i = 0; i < MAX_SHIPS; i++) {
+									ships[i].active = 0;
+							}
+							last_ship_spawn = current_time;
+						
+							middle_button_click_count = 0; 
 							log_to_buffer("COM: reset = 1 (start = 0, paused = 0)");
 							log_to_buffer("TIME:%d", game_time); 
-					}
+					} 
 					else {
 							log_to_buffer("COM: unknown cmd: %s", cmd);
 					}
 					memset((void*)cmd_buffer, 0, CMD_BUFFER_SIZE);
 			}
+//____________________BUTTONS____________________________
+			if (current_time - last_button_check >= 30) {
+					last_button_check = current_time;
 
+					uint8_t left_now = HAL_GPIO_ReadPin(LEFT_BUTTON_GPIO_Port, LEFT_BUTTON_Pin);
+					if (left_button_prev == 1 && left_now == 0) {
+							if (game_started && !game_paused && !crosshair_locked) {
+									log_to_buffer("CROSSHAIR_STEP_LEFT");
+							}
+					}
+					left_button_prev = left_now;
+
+					uint8_t right_now = HAL_GPIO_ReadPin(RIGHT_BUTTON_GPIO_Port, RIGHT_BUTTON_Pin);
+					if (right_button_prev == 1 && right_now == 0) {
+							if (game_started && !game_paused && !crosshair_locked) {
+									log_to_buffer("CROSSHAIR_STEP_RIGHT");
+							}
+					}
+					right_button_prev = right_now;
+
+					uint8_t middle_now = HAL_GPIO_ReadPin(MIDDLE_BUTTON_GPIO_Port, MIDDLE_BUTTON_Pin);
+					if (middle_button_prev == 1 && middle_now == 0) {
+							if (game_started && !game_paused) {
+									if (!crosshair_locked) {
+											crosshair_locked = 1;
+											log_to_buffer("MIDDLE_CLICK_1");
+									} else {
+											crosshair_locked = 0;
+											log_to_buffer("MIDDLE_CLICK_2");
+									}
+							}
+					}
+					middle_button_prev = middle_now;
+			}
+			
+			if (game_started && !game_paused) {
+					uint32_t now = HAL_GetTick();
+					if (now - last_ship_spawn >= 2000) {
+							last_ship_spawn = now;
+							spawn_ship();
+					}
+			}
+			
 			if (game_started && !game_paused) {
 					if (current_time - last_second_tick >= 1000) {
 							last_second_tick = current_time;

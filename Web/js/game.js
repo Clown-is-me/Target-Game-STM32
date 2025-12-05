@@ -208,18 +208,77 @@ class ShipGame {
     
     startSpawningShips() {
         this.clearShips();
-        
-        // Создаем первый корабль сразу
+        // В COM-режиме корабли генерируются на плате — ничего не делаем
+        if (this.useComTimer) {
+            return;
+        }
+        // В keyboard-режиме — старая логика
         this.spawnShip();
-        
-        // Запускаем таймер появления кораблей
         this.shipSpawnTimer = setInterval(() => {
             if (!this.gamePaused && this.gameActive) {
-                if (this.ships.length < 8) { // Максимум 8 кораблей одновременно
+                if (this.ships.length < 8) {
                     this.spawnShip();
                 }
             }
         }, 2000);
+    }
+
+    // Новый метод: добавление корабля от COM-устройства
+    addShipFromCom(type, x, y) {
+        if (!this.gameActive || this.gamePaused) return;
+
+        let shipClass = 'small';
+        if (type === 20) shipClass = 'medium';
+        else if (type === 30) shipClass = 'large';
+        const points = type;
+
+        const ship = document.createElement('img');
+        ship.className = `ship ${shipClass} appearing`; // Добавляем класс appearing
+        ship.dataset.points = points;
+        ship.src = `assets/ship-${shipClass}.png`;
+        ship.alt = 'Корабль';
+
+        // Размеры для позиционирования
+        const size = shipClass === 'small' ? 50 :
+                    shipClass === 'medium' ? 70 : 90;
+        const maxX = this.fieldWidth - size - 40;
+        const maxY = this.fieldHeight - size - 100;
+
+        // Ограничиваем координаты
+        const finalX = Math.max(20, Math.min(maxX, x));
+        const finalY = y !== null ? Math.max(20, Math.min(maxY, y)) : (20 + Math.random() * maxY);
+
+        ship.style.left = `${finalX}px`;
+        ship.style.top = `${finalY}px`;
+        this.gameField.appendChild(ship);
+
+        const shipData = { element: ship, points, x: finalX, y: finalY };
+        this.ships.push(shipData);
+
+        const shipName = this.getShipNameByPoints(points);
+        this.logMessage(`Обнаружена ${shipName} по курсу ${Math.floor(finalX)}`);
+
+        // Убираем класс анимации после её завершения
+        setTimeout(() => {
+            ship.classList.remove('appearing');
+        }, 500);
+
+        // Автоудаление с анимацией
+        setTimeout(() => {
+            if (!this.gameActive || this.gamePaused) {
+                return; // Не удаляем, если игра на паузе или завершена
+            }
+            if (ship.parentNode) {
+                ship.classList.add('hit'); // Добавляем класс для анимации исчезновения
+                setTimeout(() => {
+                    if (ship.parentNode && this.gameActive && !this.gamePause ) {
+                        ship.remove();
+                    }
+                }, 300);
+                const index = this.ships.findIndex(s => s.element === ship);
+                if (index !== -1) this.ships.splice(index, 1);
+            }
+        }, 15000);
     }
     
     spawnShip() {
@@ -385,28 +444,32 @@ class ShipGame {
             this.crosshairMoveTimer = null;
         }
     }
+
+    stepCrosshair(direction) {
+        if (!this.gameActive || this.gamePaused || this.crosshairLocked) return;
+        const step = 25; // пикселей за шаг
+        const currentLeft = parseInt(this.crosshair.style.left) || this.fieldWidth / 2;
+        const newLeft = currentLeft + (direction * step);
+        const minX = 40;
+        const maxX = this.fieldWidth - 40;
+        if (newLeft >= minX && newLeft <= maxX) {
+            this.crosshair.style.left = `${newLeft}px`;
+        }
+    }
     
     fire() {
         if (!this.gameActive || this.gamePaused || !this.crosshairLocked) return;
-        
+        console.log('Кораблей в массиве:', this.ships.length);
         this.shots++;
-        this.logMessage(`Выстрел произведен (всего: ${this.shots})`);
-        
-        // Проверяем попадание в корабли
         const hit = this.checkHit();
-        
         if (hit) {
             this.logMessage('Попадание!');
         } else {
-            // Эффект промаха
             this.createMissEffect();
             this.logMessage('Промах!');
         }
-        
-        // Снимаем фиксацию прицела после выстрела
         this.crosshairLocked = false;
         this.stopCrosshairAutoMove();
-        
         this.updateCrosshairState();
         this.updateUI();
     }
@@ -590,7 +653,7 @@ class ShipGame {
             'Ошибка'
         ];
 
-        const isSystemMessage = systemKeywords.some(keyword => message.includes(keyword));
+        const isSystemMessage = systemKeywords.some(keyword => message.includes(keyword) && !message.includes("TIME"));
 
         if (isSystemMessage) {
             console.log(`[Журнал] ${message}`);
@@ -598,7 +661,7 @@ class ShipGame {
         
         // Ограничиваем количество записей
         const entries = logContent.querySelectorAll('.log-entry');
-        if (entries.length > 10) {
+        if (entries.length > 100) {
             entries[0].remove();
         }
     }

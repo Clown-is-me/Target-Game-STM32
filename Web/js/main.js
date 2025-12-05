@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
     // Создаем UI
     const ui = new GameUI(game);
-    
+    game.comInterface = ui.comInterface;
     // Настраиваем обработку ввода
     const inputHandler = new InputHandler(game);
     game.inputHandler = inputHandler; // Сохраняем ссылку в игре

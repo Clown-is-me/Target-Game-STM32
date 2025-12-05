@@ -152,6 +152,12 @@ class COMInterface {
     }
 
     handleData(data) {
+        if (data.startsWith('TIME:')) {
+            const seconds = parseInt(data.substring(5));
+            if (!isNaN(seconds) && this.game) {
+                this.game.updateTimeFromCom(seconds);
+            }
+        }
         if (data === 'LEFT_PRESS') this.handleLeftPress();
         else if (data === 'LEFT_RELEASE') this.handleLeftRelease();
         else if (data === 'RIGHT_PRESS') this.handleRightPress();
@@ -231,10 +237,10 @@ class COMInterface {
         this.game.logMessage('COM-порт отключён');
     }
 
-    // 🔹 НОВЫЙ МЕТОД: отправка команд на STM32
+    //НОВЫЙ МЕТОД: отправка команд на STM32
     async sendCommand(command) {
         if (!this.connected || !this.port?.writable) {
-            console.warn('Невозможно отправить команду: COM не подключен');
+            console.warn('Невозможно отправить команду: COM не подключён');
             return false;
         }
         try {

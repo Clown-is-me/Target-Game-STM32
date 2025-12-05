@@ -45,9 +45,7 @@ uint8_t disp_buf[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t seg_nums[4] = {0xF8, 0xF4, 0xF2, 0xF1};
 uint8_t seg_digits[10] = {0xC0, 0xF9, 0xA4, 0xB0, 0x99, 
 													0x92, 0x82, 0xF8, 0x80, 0x90};
-
-uint8_t seg_minus = 0x40;   
-uint8_t seg_dot = 0x80; 											
+											
 volatile uint8_t logging_enabled = 1;
 char log_buffer[128];			
 
@@ -69,6 +67,10 @@ volatile char cmd_buffer[CMD_BUFFER_SIZE];
 volatile uint8_t cmd_index = 0;
 volatile uint8_t cmd_ready = 0;
 													
+volatile uint8_t game_time = 60;          
+volatile uint32_t last_second_tick = 0;  
+volatile uint8_t display_on = 1;          
+volatile uint32_t last_blink_tick = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -161,26 +163,31 @@ void writeSegmentToDisplay(uint8_t z, uint8_t val){
 	HAL_GPIO_WritePin(SHIFT_LATCH_GPIO_Port, SHIFT_LATCH_Pin, GPIO_PIN_SET);
 }
 
-void displayFloatNumber(float number) {
-    if(number > 9.99f) number = 9.99f;
-    if(number < -9.99f) number = -9.99f;
+void displayInt(uint8_t value) {
+    if (value > 99) value = 99;
 
-    int negative = (number < 0);
-    if(negative) number = -number;
+    uint8_t tens = value / 10;     
+    uint8_t ones = value % 10;     
 
-    int scaled = (int)(number * 100 + 0.5f);
-
-    int d1 = scaled / 100;           
-    int d2 = (scaled / 10) % 10;     
-    int d3 = scaled % 10;            
-	
-    disp_buf[0] = seg_digits[d3];              
-    disp_buf[1] = seg_digits[d2];    
-    disp_buf[2] = seg_digits[d1] & seg_dot;              
-    disp_buf[3] = negative ? seg_minus : 0xFF; 
+    disp_buf[3] = 0xFF;            
+    disp_buf[2] = 0xFF;            
+    disp_buf[1] = seg_digits[tens]; 
+    disp_buf[0] = seg_digits[ones]; 
 }
+void updateDisplay(void) {
+    if (!display_on) {
+        for (int i = 0; i < 4; i++) {
+            writeSegmentToDisplay(seg_nums[i], 0xFF);
+        }
+        return;
+    }
 
+    displayInt(game_time);
 
+    for (int i = 0; i < 4; i++) {
+        writeSegmentToDisplay(seg_nums[i], disp_buf[i]);
+    }
+}
 void leftButtonHandler(){
 		uint32_t current_time = HAL_GetTick();
     
@@ -315,55 +322,94 @@ int main(void)
 	
   /* USER CODE BEGIN 2 */
 	HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
-	seg_minus = ~seg_minus;
-	seg_dot = ~seg_dot;
-
+	last_second_tick = HAL_GetTick();
+	last_blink_tick = HAL_GetTick();
 	HAL_UART_Receive_IT(&huart2, (uint8_t*)&uart_rx_byte, 1);
 	/* USER CODE END 2 */
+	
+	for (int i = 0; i < 4; i++) {
+			writeSegmentToDisplay(seg_nums[i], 0xFF);
+	}
+	HAL_Delay(10); // ????????? ?????
 	HAL_TIM_Base_Start_IT(&htim2);
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+/* USER CODE BEGIN WHILE */
 	while (1)
-    {
-        
+	{
+			uint32_t current_time = HAL_GetTick(); // ?? ????????? ????? ? ?????? ?????
+
 			/* USER CODE END WHILE */
-				if (log_pending) {
-						process_logs();
-				}
-				
-				if (cmd_ready) {
-						cmd_ready = 0;
-						char *cmd = (char*)cmd_buffer;
 
-						if (cmd[0] == '\0') {
-								memset((void*)cmd_buffer, 0, CMD_BUFFER_SIZE);
-								continue;
-						}
-					
-						if (strncmp(cmd, "CMD:START", 9) == 0) {
-								game_started = 1;
-								game_paused = 0;
-								log_to_buffer("COM: START=%d, PAUSE = %d", game_started, game_paused);
-						}
-						else if (strncmp(cmd, "CMD:PAUSE", 9) == 0) {
-								game_started = 1; 
-								game_paused = 1;
-								log_to_buffer("COM: START=%d, PAUSE = %d", game_started, game_paused);
-						}
-						else if (strncmp(cmd, "CMD:RESET", 9) == 0) {
-								game_started = 0;
-								game_paused = 0;
-								log_to_buffer("COM: reset = 1 (start = 0, paused = 0)");
-						}
-						else {
-								log_to_buffer("COM: unknown cmd: %s", cmd);
-						}
+			// ????????? ?????
+			if (log_pending) {
+					process_logs();
+			}
 
-						memset((void*)cmd_buffer, 0, CMD_BUFFER_SIZE);
-				}
-				HAL_Delay(1);
-        /* USER CODE BEGIN 3 */
-    }
+			// ????????? ??????
+			if (cmd_ready) {
+					cmd_ready = 0;
+					char *cmd = (char*)cmd_buffer;
+					if (cmd[0] == '\0') {
+							memset((void*)cmd_buffer, 0, CMD_BUFFER_SIZE);
+							continue;
+					}
+
+					if (strncmp(cmd, "CMD:START", 9) == 0) {
+							if (!game_started) {
+									game_time = 60;
+									last_second_tick = current_time;
+									last_blink_tick = current_time;
+							}
+							game_started = 1;
+							game_paused = 0;
+							log_to_buffer("COM: START=%d, PAUSE = %d", game_started, game_paused);
+							log_to_buffer("TIME:%d", game_time); 
+					}
+					else if (strncmp(cmd, "CMD:PAUSE", 9) == 0) {
+							game_started = 1;
+							game_paused = 1;
+							log_to_buffer("COM: START=%d, PAUSE = %d", game_started, game_paused);
+					}
+					else if (strncmp(cmd, "CMD:RESET", 9) == 0) {
+							game_started = 0;
+							game_paused = 0;
+							game_time = 60;
+							log_to_buffer("COM: reset = 1 (start = 0, paused = 0)");
+							log_to_buffer("TIME:%d", game_time); 
+					}
+					else {
+							log_to_buffer("COM: unknown cmd: %s", cmd);
+					}
+					memset((void*)cmd_buffer, 0, CMD_BUFFER_SIZE);
+			}
+
+			if (game_started && !game_paused) {
+					if (current_time - last_second_tick >= 1000) {
+							last_second_tick = current_time;
+							if (game_time > 0) {
+									game_time--;
+									log_to_buffer("TIME:%d", game_time);
+									if (game_time == 0) {
+											game_started = 0;
+									}
+							}
+					}
+					display_on = 1;
+			}
+			
+			if (game_started && game_paused) {
+					if (current_time - last_blink_tick >= 500) {
+							last_blink_tick = current_time;
+							display_on = !display_on;
+					}
+			}
+			updateDisplay();
+
+			//HAL_Delay(1);
+
+			/* USER CODE BEGIN 3 */
+	}
   /* USER CODE END 3 */
 }
 

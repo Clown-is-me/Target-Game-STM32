@@ -62,13 +62,19 @@ class GameUI {
         if (!this.game.gameActive) {
             this.game.startGame();
             this.startBtn.innerHTML = '<i class="fas fa-pause"></i> Пауза';
-            if (this.comInterface) this.comInterface.sendCommand('START');
+            // Отправляем START на плату, если режим COM
+            if (this.controlMode === 'com' && this.comInterface) {
+                this.comInterface.sendCommand('START');
+            }
         } else {
             this.game.pauseGame();
-            this.startBtn.innerHTML = this.game.gamePaused
-                ? '<i class="fas fa-play"></i> Продолжить'
+            this.startBtn.innerHTML = this.game.gamePaused 
+                ? '<i class="fas fa-play"></i> Продолжить' 
                 : '<i class="fas fa-pause"></i> Пауза';
-            if (this.comInterface) this.comInterface.sendCommand(this.game.gamePaused ? 'PAUSE' : 'START');
+            // Отправляем PAUSE/START на плату
+            if (this.controlMode === 'com' && this.comInterface) {
+                this.comInterface.sendCommand(this.game.gamePaused ? 'PAUSE' : 'START');
+            }
         }
     }
 
@@ -76,39 +82,38 @@ class GameUI {
     handleResetClick() {
         this.game.resetGame();
         this.startBtn.innerHTML = '<i class="fas fa-play"></i> Начать патруль';
-        if (this.comInterface) this.comInterface.sendCommand('RESET');
+        if (this.controlMode === 'com' && this.comInterface) {
+            this.comInterface.sendCommand('RESET');
+        }
     }
     
     setControlMode(mode) {
+        // ВСЕГДА сбрасываем игру при смене режима
+        this.game.resetGame();
+
         if (mode === 'keyboard') {
             this.controlMode = 'keyboard';
             this.keyboardModeBtn.classList.add('active');
             this.comModeBtn.classList.remove('active');
-            
-            // Включаем InputHandler (клавиатурное управление)
+            this.game.useComTimer = false;
             if (this.game.inputHandler) {
                 this.game.inputHandler.enable();
             }
-            
-            this.game.logMessage('Режим управления: Клавиатура');
-            
+            this.game.logMessage('Режим управления: Клавиатура. Таймер на веб-части.');
         } else if (mode === 'com') {
             if (!this.comInterface || !this.comInterface.connected) {
-                this.game.logMessage('COM-устройство не подключено. Используйте режим клавиатуры.');
+                this.game.logMessage('COM-устройство не подключено. Переключаюсь на клавиатуру.');
                 this.setControlMode('keyboard');
                 return;
             }
-            
             this.controlMode = 'com';
             this.comModeBtn.classList.add('active');
             this.keyboardModeBtn.classList.remove('active');
-            
-            // Отключаем InputHandler (клавиатурное управление)
+            this.game.useComTimer = true;
             if (this.game.inputHandler) {
                 this.game.inputHandler.disable();
             }
-            
-            this.game.logMessage('Режим управления: COM-устройство');
+            this.game.logMessage('Режим управления: COM-устройство. Таймер на плате.');
         }
     }
     

@@ -12,6 +12,7 @@ class ShipGame {
         this.crosshairSpeed = 6; // Скорость движения прицела
         this.crosshairVerticalSpeed = 3;
         this.crosshairVerticalDirection = 1;
+        this.useComTimer = false; // Управление таймером через COM
         
         // Управление (используется InputHandler)
         this.moveLeft = false;
@@ -113,35 +114,34 @@ class ShipGame {
     startGame() {
         if (this.gameActive) return;
         
+        // Если используется COM-таймер — не запускаем локальный setInterval
         this.gameActive = true;
         this.gamePaused = false;
         this.score = 0;
         this.hits = 0;
         this.shots = 0;
-        this.timeLeft = this.gameTime;
-        
+        this.timeLeft = this.gameTime; // сброс времени (даже если COM — для UI)
+
         this.updateUI();
         this.clearShips();
         this.resetCrosshair();
-        
-        // Запускаем таймер игры
-        this.gameTimer = setInterval(() => {
-            if (!this.gamePaused) {
-                this.timeLeft--;
-                this.updateUI();
-                
-                if (this.timeLeft <= 0) {
-                    this.endGame();
+
+        if (!this.useComTimer) {
+            // Только если НЕ COM-режим
+            this.gameTimer = setInterval(() => {
+                if (!this.gamePaused) {
+                    this.timeLeft--;
+                    this.updateUI();
+                    if (this.timeLeft <= 0) {
+                        this.endGame();
+                    }
                 }
-            }
-        }, 1000);
-        
-        // Запускаем появление кораблей
+            }, 1000);
+        }
+
         this.startSpawningShips();
-        
         this.gameStateText.textContent = 'Патрулирование в процессе!';
         this.gameStateText.style.color = '#82b9bf';
-        
         this.logMessage('Начато патрулирование акватории');
     }
     
@@ -164,25 +164,30 @@ class ShipGame {
     endGame() {
         this.gameActive = false;
         this.crosshairLocked = false;
-        
-        if (this.crosshairMoveTimer) {
-            clearInterval(this.crosshairMoveTimer);
-            this.crosshairMoveTimer = null;
+        this.stopCrosshairAutoMove();
+
+        if (this.gameTimer) {
+            clearInterval(this.gameTimer);
+            this.gameTimer = null;
         }
-        
-        clearInterval(this.gameTimer);
-        clearInterval(this.shipSpawnTimer);
-        
-        this.gameTimer = null;
-        this.shipSpawnTimer = null;
-        
+        if (this.shipSpawnTimer) {
+            clearInterval(this.shipSpawnTimer);
+            this.shipSpawnTimer = null;
+        }
+
         this.gameStateText.textContent = 'Патруль завершён';
         this.gameStateText.style.color = '#3a5361';
-        
         this.logMessage('Патруль завершен');
-        
-        // Показываем результаты
-        this.showResults();
+        this.showResults(); // ← вызывается
+    }
+
+    updateTimeFromCom(seconds) {
+        if (!this.useComTimer || !this.gameActive) return;
+        this.timeLeft = seconds;
+        this.updateUI();
+        if (this.timeLeft <= 0) {
+            this.endGame(); // ← вызывается
+        }
     }
     
     resetGame() {

@@ -154,18 +154,11 @@ class COMInterface {
     handleData(data) {
         if (data.startsWith('TIME:')) {
             const seconds = parseInt(data.substring(5));
-            if (!isNaN(seconds) && this.game) {
-                this.game.updateTimeFromCom(seconds);
-            }
+            if (!isNaN(seconds)) this.game.updateTimeFromCom(seconds);
         }
         else if (data.startsWith('SHIP:')) {
-            const parts = data.substring(5).split(',');
-            const type = parseInt(parts[0]);
-            const x = parseInt(parts[1]);
-            const y = parts[2] ? parseInt(parts[2]) : null;
-            if (!isNaN(type) && !isNaN(x) && this.game) {
-                this.game.addShipFromCom(type, x, y);
-            }
+            const [type, x, y] = data.substring(5).split(',').map(Number);
+            if (!isNaN(type) && !isNaN(x)) this.game.addShipFromCom(type, x, y);
         }
         else if (data.startsWith('RESULT:')) {
             const result = data.substring(7);
@@ -173,16 +166,19 @@ class COMInterface {
                 this.game.handleComMiss();
             } else if (result.startsWith('HIT:')) {
                 const points = parseInt(result.substring(4));
-                if (!isNaN(points)) {
-                    this.game.handleComHit(points);
-                }
+                if (!isNaN(points)) this.game.handleComHit(points);
             }
         }
-        // Старые команды — для совместимости (можно удалить позже)
-        else if (data === 'CROSSHAIR_STEP_LEFT') this.handleLeftStep();
-        else if (data === 'CROSSHAIR_STEP_RIGHT') this.handleRightStep();
-        else if (data === 'MIDDLE_CLICK_1') this.handleMiddleClick1();
-        else if (data === 'MIDDLE_CLICK_2') this.handleMiddleClick2();
+        else if (data.startsWith('CROSSHAIR:')) {
+            const [x, y] = data.substring(10).split(',').map(Number);
+            if (!isNaN(x) && !isNaN(y)) {
+                this.game.updateCrosshairFromCom(x, y);
+            }
+        }
+        else if (data.startsWith('LOCK:')) {
+            const locked = data.substring(5) === '1';
+            this.game.setCrosshairLockedFromCom(locked);
+        }
     }
 
     handleLeftStep() {

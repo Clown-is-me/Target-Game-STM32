@@ -97,8 +97,14 @@ uint8_t is_uart_tx_ready(void) {
 
 void log_to_buffer(const char* format, ...) {
     if (!logging_enabled) return;
+
+    // ??????????? ????? — ????? ??? ?????
     static char tx_buffer[128];
-    if (uart_tx_busy) return;
+
+    // ???? DMA TX ??? ???????? — ?????????? ?????????
+    if (uart_tx_busy) {
+        return;
+    }
 
     va_list args;
     va_start(args, format);
@@ -106,10 +112,12 @@ void log_to_buffer(const char* format, ...) {
     va_end(args);
     if (len <= 0) return;
 
+    // ????????? \r\n
     tx_buffer[len] = '\r';
     tx_buffer[len + 1] = '\n';
     len += 2;
 
+    // ????????????? ???? ????? ???????? DMA
     uart_tx_busy = 1;
     HAL_UART_Transmit_DMA(&huart2, (uint8_t*)tx_buffer, len);
 }
@@ -317,7 +325,7 @@ void update_game_logic(uint32_t current_time) {
         }
 
         static uint32_t last_pos_send = 0;
-        if (current_time - last_pos_send >= 50) {
+        if (current_time - last_pos_send >= 80) {
             last_pos_send = current_time;
             log_to_buffer("CROSSHAIR:%d,%d", crosshair_x, crosshair_y);
         }

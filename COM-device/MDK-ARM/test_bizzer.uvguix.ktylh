@@ -1865,11 +1865,11 @@
       <ActiveTab>0</ActiveTab>
       <Doc>
         <Name>../Core/Src/main.c</Name>
-        <ColumnNumber>33</ColumnNumber>
-        <TopLine>96</TopLine>
-        <CurrentLine>394</CurrentLine>
+        <ColumnNumber>36</ColumnNumber>
+        <TopLine>45</TopLine>
+        <CurrentLine>74</CurrentLine>
         <Folding>1</Folding>
-        <ContractedFolders>87,93,97,117,126,133,143,157,161,188,216,240,286,327</ContractedFolders>
+        <ContractedFolders>87,93,125,134,141,151,165,169,196,224,248,294,335</ContractedFolders>
         <PaneID>0</PaneID>
       </Doc>
     </MDIGroup>

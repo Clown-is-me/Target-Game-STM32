@@ -280,6 +280,66 @@ class ShipGame {
             }
         }, 15000);
     }
+
+    // Устанавливает позицию прицела из COM (в логических координатах 0–800 × 0–600)
+    updateCrosshairFromCom(logicalX, logicalY) {
+        // Обязательно: обновить размеры поля, если ещё не сделано
+        if (!this.fieldRect) this.updateFieldSize();
+        
+        // Преобразуем логические координаты (0–800 × 0–600) в пиксели
+        const scaleX = this.fieldWidth / 800;
+        const scaleY = this.fieldHeight / 600;
+        const pixelX = logicalX * scaleX;
+        const pixelY = logicalY * scaleY;
+        
+        // Применяем позицию
+        this.crosshair.style.left = `${pixelX}px`;
+        this.crosshair.style.top = `${pixelY}px`;
+    }
+
+    setCrosshairLockedFromCom(locked) {
+        this.crosshairLocked = locked;
+        this.updateCrosshairState();
+    }
+
+    // Обработка промаха от COM
+    handleComMiss() {
+        if (!this.gameActive || this.gamePaused) return;
+        this.shots++;
+        this.createMissEffect();
+        this.logMessage('Промах! (от COM)');
+        this.crosshairLocked = false;
+        this.updateCrosshairState();
+        this.updateUI();
+    }
+
+    handleComHit(points) {
+        if (!this.gameActive || this.gamePaused) return;
+        this.shots++;
+        this.hits++;
+        this.score += points;
+        const shipName = this.getShipNameByPoints(points);
+        this.logMessage(`Потоплена ${shipName}! +${points} очков (от COM)`);
+        this.createSplashEffectAtCrosshair();
+        this.crosshairLocked = false;
+        this.updateCrosshairState();
+        this.updateUI();
+    }
+
+    createSplashEffectAtCrosshair() {
+        const crosshairRect = this.crosshair.getBoundingClientRect();
+        const fieldRect = this.gameField.getBoundingClientRect();
+        const splash = document.createElement('div');
+        splash.className = 'splash';
+        const x = crosshairRect.left + crosshairRect.width / 2 - fieldRect.left;
+        const y = crosshairRect.top + crosshairRect.height / 2 - fieldRect.top;
+        splash.style.left = `${x - 20}px`;
+        splash.style.top = `${y - 20}px`;
+        this.gameField.appendChild(splash);
+        setTimeout(() => {
+            if (splash.parentNode) splash.remove();
+        }, 600);
+    }
     
     spawnShip() {
         if (!this.gameActive || this.gamePaused) return;
@@ -396,6 +456,7 @@ class ShipGame {
     }
     
     lockCrosshair() {
+        if (this.useComTimer) return;
         if (!this.gameActive || this.gamePaused || this.crosshairLocked) return;
         
         this.crosshairLocked = true;
@@ -408,6 +469,7 @@ class ShipGame {
     }
     
     startCrosshairAutoMove() {
+        if (this.useComTimer) return;
         if (this.crosshairMoveTimer) {
             clearInterval(this.crosshairMoveTimer);
         }
@@ -446,6 +508,7 @@ class ShipGame {
     }
 
     stepCrosshair(direction) {
+        if (this.useComTimer) return;
         if (!this.gameActive || this.gamePaused || this.crosshairLocked) return;
         const step = 25; // пикселей за шаг
         const currentLeft = parseInt(this.crosshair.style.left) || this.fieldWidth / 2;
@@ -458,6 +521,7 @@ class ShipGame {
     }
     
     fire() {
+        if (this.useComTimer) return;
         if (!this.gameActive || this.gamePaused || !this.crosshairLocked) return;
         console.log('Кораблей в массиве:', this.ships.length);
         this.shots++;

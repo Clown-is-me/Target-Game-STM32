@@ -2,10 +2,10 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dma.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include "math.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -18,7 +18,20 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define PI 3.14159f
+#define DEBOUNCE_DELAY 20
+#define LOG_BUFFER_SIZE 256
+#define CMD_BUFFER_SIZE 32
+#define MAX_SHIPS 30
+#define FIELD_WIDTH 800
+#define FIELD_HEIGHT 600
+
+
+typedef struct {
+    uint8_t active;
+    uint8_t type;
+    uint16_t x;
+    uint16_t y;
+} Ship;
 
 /* USER CODE END PD */
 
@@ -29,17 +42,52 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+char log_ring_buffer[LOG_BUFFER_SIZE];
+volatile uint8_t uart_rx_byte; 
+volatile uint16_t log_write_idx = 0;
+volatile uint16_t log_read_idx = 0;
+volatile uint8_t log_pending = 0;
+
 uint8_t disp_buf[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t seg_nums[4] = {0xF8, 0xF4, 0xF2, 0xF1};
 uint8_t seg_digits[10] = {0xC0, 0xF9, 0xA4, 0xB0, 0x99, 
 													0x92, 0x82, 0xF8, 0x80, 0x90};
+											
+volatile uint8_t logging_enabled = 1;
+char log_buffer[128];			
 
-uint8_t seg_minus = 0x40;   
-uint8_t seg_dot = 0x80; 
+volatile uint8_t button_left_state = 0;
+volatile uint8_t button_middle_state = 0;
+volatile uint8_t button_right_state = 0;
+volatile uint32_t button_left_last_time = 0;
+volatile uint32_t button_middle_last_time = 0;
+volatile uint32_t button_right_last_time = 0;
 
-volatile uint8_t signal_active = 0;
-volatile float current_signal_value = 0.0f;
-volatile uint32_t last_update_time = 0;										
+volatile uint8_t crosshair_locked = 0;
+volatile uint32_t last_com_send_time = 0;
+volatile uint8_t middle_button_click_count = 0;
+													
+volatile uint8_t game_started = 0;
+volatile uint8_t game_paused = 0;
+													
+volatile char cmd_buffer[CMD_BUFFER_SIZE];
+volatile uint8_t cmd_index = 0;
+volatile uint8_t cmd_ready = 0;
+													
+volatile uint8_t game_time = 60;          
+volatile uint32_t last_second_tick = 0;  
+volatile uint8_t display_on = 1;          
+volatile uint32_t last_blink_tick = 0;
+
+//volatile uint8_t left_button_was_pressed = 0;
+//volatile uint8_t right_button_was_pressed = 0;
+volatile uint8_t left_button_prev = 1;   // 1 = ???????? (?? ?????????)
+volatile uint8_t right_button_prev = 1;
+volatile uint8_t middle_button_prev = 1;
+volatile uint8_t middle_click_pending = 0; // ????: ?????? ???? ??????
+
+Ship ships[MAX_SHIPS] = {0};
+volatile uint32_t last_ship_spawn = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -49,6 +97,73 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void log_to_buffer(const char* format, ...) {
+    if (!logging_enabled) return;
+    
+    va_list args;
+    va_start(args, format);
+    uint16_t next_idx = (log_write_idx + 1) % LOG_BUFFER_SIZE;
+    
+    if (next_idx == log_read_idx) {
+        va_end(args);
+        return;
+    }
+    
+    char temp_buf[64];
+    int len = vsnprintf(temp_buf, sizeof(temp_buf) - 2, format, args);
+    va_end(args);
+    
+    if (len > 0) {
+        if (len < sizeof(temp_buf) - 2) {
+            temp_buf[len] = '\r';
+            temp_buf[len + 1] = '\n';
+            temp_buf[len + 2] = '\0';
+            len += 2;
+        }
+        
+        for (int i = 0; i < len && temp_buf[i] != '\0'; i++) {
+            log_ring_buffer[log_write_idx] = temp_buf[i];
+            log_write_idx = (log_write_idx + 1) % LOG_BUFFER_SIZE;
+        }
+        
+        log_pending = 1;
+    }
+}
+void process_logs(void) {
+    while (log_read_idx != log_write_idx && __HAL_UART_GET_FLAG(&huart2, UART_FLAG_TXE)) {
+        HAL_UART_Transmit(&huart2, (uint8_t*)&log_ring_buffer[log_read_idx], 1, 1);
+        log_read_idx = (log_read_idx + 1) % LOG_BUFFER_SIZE;
+    }
+    
+    if (log_read_idx == log_write_idx) {
+        log_pending = 0;
+    }
+}
+void log_message(const char* format, ...) {
+    if (!logging_enabled) return;
+    
+    va_list args;
+    va_start(args, format);
+    
+    char temp_buf[128];
+    int len = vsnprintf(temp_buf, sizeof(temp_buf) - 2, format, args);
+    va_end(args);
+    
+    if (len > 0) {
+        // ????????? \r\n
+        if (len < sizeof(temp_buf) - 2) {
+            temp_buf[len] = '\r';
+            temp_buf[len + 1] = '\n';
+            temp_buf[len + 2] = '\0';
+            len += 2;
+        }
+        
+        log_to_buffer("%s", temp_buf);
+    }
+}
+
+										
 void writeByteToDisplay(uint8_t z){
 	for(int i = 0; i < 8; ++i){
 		HAL_GPIO_WritePin(SEG_DATA_GPIO_Port, SEG_DATA_Pin, ((z & 0x80) != 0) ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -65,54 +180,103 @@ void writeSegmentToDisplay(uint8_t z, uint8_t val){
 	HAL_GPIO_WritePin(SHIFT_LATCH_GPIO_Port, SHIFT_LATCH_Pin, GPIO_PIN_SET);
 }
 
+void displayInt(uint8_t value) {
+    if (value > 99) value = 99;
 
+    uint8_t tens = value / 10;     
+    uint8_t ones = value % 10;     
 
-void displayFloatNumber(float number) {
-    if(number > 9.99f) number = 9.99f;
-    if(number < -9.99f) number = -9.99f;
-
-    int negative = (number < 0);
-    if(negative) number = -number;
-
-    int scaled = (int)(number * 100 + 0.5f);
-
-    int d1 = scaled / 100;           
-    int d2 = (scaled / 10) % 10;     
-    int d3 = scaled % 10;            
-	
-    disp_buf[0] = seg_digits[d3];              
-    disp_buf[1] = seg_digits[d2];    
-    disp_buf[2] = seg_digits[d1] & seg_dot;              
-    disp_buf[3] = negative ? seg_minus : 0xFF; 
+    disp_buf[3] = 0xFF;            
+    disp_buf[2] = 0xFF;            
+    disp_buf[1] = seg_digits[tens]; 
+    disp_buf[0] = seg_digits[ones]; 
 }
-float generateSignal(uint32_t time_ms) {
-    float frequency = 0.5f; 
-    float amplitude = 1.0f;
-    return amplitude * sin(2.0f * PI * frequency * (time_ms / 1000.0f));
-}
-void leftButtonHandler(){
-		if (!signal_active) {
-				signal_active = 1;
-				last_update_time = HAL_GetTick();
-		} else {
-				signal_active = 0;
-				current_signal_value = 0.0f;
-				displayFloatNumber(0.0f); 
-		}
-}
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-    if(GPIO_Pin == LEFT_BUTTON_Pin)
-				leftButtonHandler();
-}
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-    if (htim->Instance == TIM2) {
-        if (signal_active) {
-            uint32_t current_time = HAL_GetTick();
-            current_signal_value = generateSignal(current_time);
-            displayFloatNumber(current_signal_value);
-            last_update_time = current_time;
+void updateDisplay(void) {
+    if (!display_on) {
+        for (int i = 0; i < 4; i++) {
+            writeSegmentToDisplay(seg_nums[i], 0xFF);
         }
+        return;
+    }
+
+    displayInt(game_time);
+
+    for (int i = 0; i < 4; i++) {
+        writeSegmentToDisplay(seg_nums[i], disp_buf[i]);
+    }
+}
+uint32_t get_random(void) {
+    return HAL_GetTick() ^ (HAL_GetTick() << 5) ^ (HAL_GetTick() >> 3);
+}
+
+void spawn_ship(void) {
+    int free_slot = -1;
+    for (int i = 0; i < MAX_SHIPS; i++) {
+        if (!ships[i].active) {
+            free_slot = i;
+            break;
+        }
+    }
+    if (free_slot == -1) return; // ??? ?????
+
+    uint8_t type;
+    uint32_t r = get_random() % 100;
+    if (r < 50) {
+        type = 10; // ?????
+    } else if (r < 80) {
+        type = 20; // ????
+    } else {
+        type = 30; // ??????
+    }
+
+    uint16_t x = 40 + (get_random() % (FIELD_WIDTH - 80));   // 40..720
+    uint16_t y = 40 + (get_random() % (FIELD_HEIGHT - 140)); // 40..460
+
+    ships[free_slot].active = 1;
+    ships[free_slot].type = type;
+    ships[free_slot].x = x;
+    ships[free_slot].y = y;
+
+    log_to_buffer("SHIP:%d,%d,%d", type, x, y);
+}
+void check_ship_hit(uint16_t crosshair_x) {
+    int hit = 0;
+    uint8_t hit_type = 0;
+    int hit_index = -1;
+
+    for (int i = 0; i < MAX_SHIPS; i++) {
+        if (ships[i].active) {
+            if (crosshair_x >= ships[i].x - 30 && crosshair_x <= ships[i].x + 30) {
+                hit = 1;
+                hit_type = ships[i].type;
+                hit_index = i;
+                break;
+            }
+        }
+    }
+
+    if (hit) {
+        ships[hit_index].active = 0;
+        log_to_buffer("RESULT:HIT:%d", hit_type);
+    } else {
+        log_to_buffer("RESULT:MISS");
+    }
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART2) {
+        if (uart_rx_byte == '\n' || uart_rx_byte == '\r') {
+            if (cmd_index > 0) {
+                cmd_buffer[cmd_index] = '\0';
+                cmd_ready = 1;
+                cmd_index = 0;
+            }
+        } else {
+            if (cmd_index < CMD_BUFFER_SIZE - 1) {
+                cmd_buffer[cmd_index++] = uart_rx_byte;
+            }
+        }
+        HAL_UART_Receive_IT(&huart2, (uint8_t*)&uart_rx_byte, 1);
     }
 }
 
@@ -144,23 +308,26 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_TIM2_Init();
   MX_USART2_UART_Init();
-  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 	HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
-	// ? USER CODE BEGIN 2
-
-	seg_minus = ~seg_minus;
-	seg_dot = ~seg_dot;
-
+	last_second_tick = HAL_GetTick();
+	last_blink_tick = HAL_GetTick();
+	HAL_UART_Receive_IT(&huart2, (uint8_t*)&uart_rx_byte, 1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+/* USER CODE BEGIN WHILE */
 	
-	while(1){
-		
+	uint32_t last_button_check = 0;
+	uint32_t last_second_tick = 0;
+	uint32_t last_blink_tick = 0;
+	while (1)
+	{
+			uint32_t current_time = HAL_GetTick(); 
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

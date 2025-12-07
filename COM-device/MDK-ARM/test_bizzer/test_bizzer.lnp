@@ -2,6 +2,7 @@
 "test_bizzer\startup_stm32f103xb.o"
 "test_bizzer\main.o"
 "test_bizzer\gpio.o"
+"test_bizzer\dma.o"
 "test_bizzer\tim.o"
 "test_bizzer\usart.o"
 "test_bizzer\stm32f1xx_it.o"

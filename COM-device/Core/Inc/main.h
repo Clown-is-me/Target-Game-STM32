@@ -38,6 +38,10 @@ void Error_Handler(void);
 #define LEFT_BUTTON_Pin GPIO_PIN_1
 #define LEFT_BUTTON_GPIO_Port GPIOA
 #define LEFT_BUTTON_EXTI_IRQn EXTI1_IRQn
+#define hdma_usart2_tx_Pin GPIO_PIN_2
+#define hdma_usart2_tx_GPIO_Port GPIOA
+#define hdma_usart2_rx_Pin GPIO_PIN_3
+#define hdma_usart2_rx_GPIO_Port GPIOA
 #define MIDDLE_BUTTON_Pin GPIO_PIN_4
 #define MIDDLE_BUTTON_GPIO_Port GPIOA
 #define MIDDLE_BUTTON_EXTI_IRQn EXTI4_IRQn

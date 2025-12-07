@@ -2,6 +2,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dma.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -11,47 +12,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-/* USER CODE END Includes */
+extern DMA_HandleTypeDef hdma_usart2_rx;  
+extern DMA_HandleTypeDef hdma_usart2_tx; 
 
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-#define PI 3.14159f
-#define DEBOUNCE_DELAY 20
-#define LOG_BUFFER_SIZE 256
-#define CMD_BUFFER_SIZE 32
-#define MAX_SHIPS 30
-#define FIELD_WIDTH 800
-#define FIELD_HEIGHT 600
-
+#define DEBOUNCE_DELAY 		20
+#define LOG_BUFFER_SIZE 	256
+#define cmd_line_SIZE 		32
+#define MAX_SHIPS 				30
+#define FIELD_WIDTH 			800
+#define FIELD_HEIGHT 			600
+#define RX_BUFFER_SIZE 		32
+#define CROSSHAIR_STEP_X 	25
+#define CROSSHAIR_STEP_Y 	3
+#define MIN_X 						40
+#define MAX_X 						(FIELD_WIDTH - 40)
+#define MIN_Y 						40
+#define MAX_Y 						(FIELD_HEIGHT - 40)
 
 typedef struct {
     uint8_t active;
-    uint8_t type;      // 10, 20, 30
+    uint8_t type;
     uint16_t x;
     uint16_t y;
 } Ship;
 
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-
-/* USER CODE BEGIN PV */
-char log_ring_buffer[LOG_BUFFER_SIZE];
-volatile uint8_t uart_rx_byte; 
-volatile uint16_t log_write_idx = 0;
-volatile uint16_t log_read_idx = 0;
-volatile uint8_t log_pending = 0;
+uint8_t rx_dma_buffer[RX_BUFFER_SIZE] = {0};
+uint8_t rx_prev_index = 0;
+char cmd_line[cmd_line_SIZE] = {0}; 
+uint8_t cmd_ready = 0; 
+volatile uint8_t uart_tx_busy = 0;
 
 uint8_t disp_buf[4] = {0xFF, 0xFF, 0xFF, 0xFF};
 uint8_t seg_nums[4] = {0xF8, 0xF4, 0xF2, 0xF1};
@@ -75,76 +64,47 @@ volatile uint8_t middle_button_click_count = 0;
 volatile uint8_t game_started = 0;
 volatile uint8_t game_paused = 0;
 													
-volatile char cmd_buffer[CMD_BUFFER_SIZE];
-volatile uint8_t cmd_index = 0;
-volatile uint8_t cmd_ready = 0;
-													
 volatile uint8_t game_time = 60;          
 volatile uint32_t last_second_tick = 0;  
 volatile uint8_t display_on = 1;          
 volatile uint32_t last_blink_tick = 0;
 
-//volatile uint8_t left_button_was_pressed = 0;
-//volatile uint8_t right_button_was_pressed = 0;
-volatile uint8_t left_button_prev = 1;   // 1 = ???????? (?? ?????????)
+volatile uint8_t left_button_prev = 1;  
 volatile uint8_t right_button_prev = 1;
 volatile uint8_t middle_button_prev = 1;
-volatile uint8_t middle_click_pending = 0; // ????: ?????? ???? ??????
+volatile uint8_t middle_click_pending = 0; 
 
 Ship ships[MAX_SHIPS] = {0};
 volatile uint32_t last_ship_spawn = 0;
-/* USER CODE END PV */
 
-/* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-/* USER CODE BEGIN PFP */
-/* USER CODE END PFP */
+uint8_t is_uart_tx_ready(void);
 
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
 
+//LOG + USART
 void log_to_buffer(const char* format, ...) {
     if (!logging_enabled) return;
-    
+
+    static char tx_buffer[128]; // ??????????? ?????
+
+    if (uart_tx_busy) {
+        return; // ??????????, ???? ??????
+    }
+
     va_list args;
     va_start(args, format);
-    uint16_t next_idx = (log_write_idx + 1) % LOG_BUFFER_SIZE;
-    
-    if (next_idx == log_read_idx) {
-        va_end(args);
-        return;
-    }
-    
-    char temp_buf[64];
-    int len = vsnprintf(temp_buf, sizeof(temp_buf) - 2, format, args);
+    int len = vsnprintf(tx_buffer, sizeof(tx_buffer) - 2, format, args);
     va_end(args);
-    
-    if (len > 0) {
-        if (len < sizeof(temp_buf) - 2) {
-            temp_buf[len] = '\r';
-            temp_buf[len + 1] = '\n';
-            temp_buf[len + 2] = '\0';
-            len += 2;
-        }
-        
-        for (int i = 0; i < len && temp_buf[i] != '\0'; i++) {
-            log_ring_buffer[log_write_idx] = temp_buf[i];
-            log_write_idx = (log_write_idx + 1) % LOG_BUFFER_SIZE;
-        }
-        
-        log_pending = 1;
-    }
+    if (len <= 0) return;
+
+    tx_buffer[len] = '\r';
+    tx_buffer[len + 1] = '\n';
+    len += 2;
+
+    uart_tx_busy = 1;
+    HAL_UART_Transmit_DMA(&huart2, (uint8_t*)tx_buffer, len);
 }
-void process_logs(void) {
-    while (log_read_idx != log_write_idx && __HAL_UART_GET_FLAG(&huart2, UART_FLAG_TXE)) {
-        HAL_UART_Transmit(&huart2, (uint8_t*)&log_ring_buffer[log_read_idx], 1, 1);
-        log_read_idx = (log_read_idx + 1) % LOG_BUFFER_SIZE;
-    }
-    
-    if (log_read_idx == log_write_idx) {
-        log_pending = 0;
-    }
-}
+
 void log_message(const char* format, ...) {
     if (!logging_enabled) return;
     
@@ -167,8 +127,35 @@ void log_message(const char* format, ...) {
         log_to_buffer("%s", temp_buf);
     }
 }
+							
+void check_uart_commands(void) {
+    static uint8_t checked_index = 0;
+    uint16_t current_index = RX_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart2_rx);
+    if (current_index >= RX_BUFFER_SIZE) current_index = 0;
 
-										
+    while (checked_index != current_index) {
+        uint8_t ch = rx_dma_buffer[checked_index];
+        checked_index = (checked_index + 1) % RX_BUFFER_SIZE;
+
+        if (ch == '\r' || ch == '\n') {
+            if (cmd_ready == 0 && strlen(cmd_line) > 0) {
+                cmd_ready = 1;
+            }
+            //memset(cmd_line, 0, sizeof(cmd_line));
+        } else if (strlen(cmd_line) < cmd_line_SIZE - 1) {
+            strncat(cmd_line, (char*)&ch, 1);
+        }
+        else {
+						cmd_ready = 0;
+            memset(cmd_line, 0, sizeof(cmd_line));
+        }
+    }
+}
+
+uint8_t is_uart_tx_ready(void) {
+    return (__HAL_DMA_GET_COUNTER(&hdma_usart2_tx) == 0);
+}
+//DISPLAY
 void writeByteToDisplay(uint8_t z){
 	for(int i = 0; i < 8; ++i){
 		HAL_GPIO_WritePin(SEG_DATA_GPIO_Port, SEG_DATA_Pin, ((z & 0x80) != 0) ? GPIO_PIN_SET : GPIO_PIN_RESET);
@@ -210,7 +197,7 @@ void updateDisplay(void) {
         writeSegmentToDisplay(seg_nums[i], disp_buf[i]);
     }
 }
-
+//GAME LOGIC
 uint32_t get_random(void) {
     return HAL_GetTick() ^ (HAL_GetTick() << 5) ^ (HAL_GetTick() >> 3);
 }
@@ -269,44 +256,12 @@ void check_ship_hit(uint16_t crosshair_x) {
     }
 }
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
-    /*switch (GPIO_Pin) {
-        case LEFT_BUTTON_Pin: 
-            leftButtonHandler();	
-            break;
-            
-        case MIDDLE_BUTTON_Pin: 
-            middleButtonHandler();
-            break;
-            
-        case RIGHT_BUTTON_Pin: 
-            rightButtonHandler();
-            break;
-    } */
-}
-
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-}
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+//CALLBACK
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
     if (huart->Instance == USART2) {
-        if (uart_rx_byte == '\n' || uart_rx_byte == '\r') {
-            if (cmd_index > 0) {
-                cmd_buffer[cmd_index] = '\0';
-                cmd_ready = 1;
-                cmd_index = 0;
-            }
-        } else {
-            if (cmd_index < CMD_BUFFER_SIZE - 1) {
-                cmd_buffer[cmd_index++] = uart_rx_byte;
-            }
-        }
-        HAL_UART_Receive_IT(&huart2, (uint8_t*)&uart_rx_byte, 1);
+        uart_tx_busy = 0;
     }
 }
-
-/* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
@@ -314,44 +269,18 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   */
 int main(void)
 {
-
-  /* USER CODE BEGIN 1 */
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
-
-  /* USER CODE BEGIN Init */
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
+	HAL_Init();
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_TIM2_Init();
   MX_USART2_UART_Init();
 	
-  /* USER CODE BEGIN 2 */
+	HAL_UART_Receive_DMA(&huart2, rx_dma_buffer, RX_BUFFER_SIZE);
+	rx_prev_index = RX_BUFFER_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart2_rx);
 	HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
 	last_second_tick = HAL_GetTick();
 	last_blink_tick = HAL_GetTick();
-	HAL_UART_Receive_IT(&huart2, (uint8_t*)&uart_rx_byte, 1);
-	/* USER CODE END 2 */
-	
-	for (int i = 0; i < 4; i++) {
-			writeSegmentToDisplay(seg_nums[i], 0xFF);
-	}
-	HAL_Delay(10);
-	HAL_TIM_Base_Start_IT(&htim2);
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-/* USER CODE BEGIN WHILE */
 	
 	uint32_t last_button_check = 0;
 	uint32_t last_second_tick = 0;
@@ -359,19 +288,13 @@ int main(void)
 	while (1)
 	{
 			uint32_t current_time = HAL_GetTick(); 
-			/* USER CODE END WHILE */
+			check_uart_commands(); 
 
-			// ????????? ?????
-			if (log_pending) {
-					process_logs();
-			}
-
-			// ????????? ??????
 			if (cmd_ready) {
 					cmd_ready = 0;
-					char *cmd = (char*)cmd_buffer;
+					char *cmd = (char*)cmd_line;
 					if (cmd[0] == '\0') {
-							memset((void*)cmd_buffer, 0, CMD_BUFFER_SIZE);
+							memset((void*)cmd_line, 0, cmd_line_SIZE);
 							continue;
 					}
 
@@ -390,7 +313,6 @@ int main(void)
 									ships[i].active = 0;
 							}
 							last_ship_spawn = current_time;
-							spawn_ship();
 							log_to_buffer("COM: START=%d, PAUSE = %d", game_started, game_paused);
 							log_to_buffer("TIME:%d", game_time); 
 					}
@@ -418,9 +340,10 @@ int main(void)
 					else {
 							log_to_buffer("COM: unknown cmd: %s", cmd);
 					}
-					memset((void*)cmd_buffer, 0, CMD_BUFFER_SIZE);
+					memset((void*)cmd_line, 0, cmd_line_SIZE);
 			}
-//____________________BUTTONS____________________________
+
+			
 			if (current_time - last_button_check >= 30) {
 					last_button_check = current_time;
 
@@ -455,6 +378,7 @@ int main(void)
 					middle_button_prev = middle_now;
 			}
 			
+			
 			if (game_started && !game_paused) {
 					uint32_t now = HAL_GetTick();
 					if (now - last_ship_spawn >= 2000) {
@@ -462,6 +386,7 @@ int main(void)
 							spawn_ship();
 					}
 			}
+			
 			
 			if (game_started && !game_paused) {
 					if (current_time - last_second_tick >= 1000) {
@@ -477,6 +402,7 @@ int main(void)
 					display_on = 1;
 			}
 			
+			
 			if (game_started && game_paused) {
 					if (current_time - last_blink_tick >= 500) {
 							last_blink_tick = current_time;
@@ -485,11 +411,8 @@ int main(void)
 			}
 			updateDisplay();
 
-			//HAL_Delay(1);
-
-			/* USER CODE BEGIN 3 */
 	}
-  /* USER CODE END 3 */
+
 }
 
 /**

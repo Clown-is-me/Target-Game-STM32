@@ -116,6 +116,35 @@
                     </div>
                 </div>
                 
+                <!-- Панель графика шторма -->
+                <div class="storm-panel">
+                    <div class="storm-header">
+                        <i class="fas fa-wave-square"></i>
+                        <h4>Сигнал шторма</h4>
+                            <div class="storm-switch-group">
+                                <span>Ось шторма:</span>
+                                <label class="storm-switch">
+                                    <input type="radio" name="storm-axis" value="x" checked>
+                                    <span>X</span>
+                                </label>
+                                <label class="storm-switch">
+                                    <input type="radio" name="storm-axis" value="y">
+                                    <span>Y</span>
+                                </label>
+                            </div>
+                        <div class="storm-controls">
+                            <button class="storm-btn storm-btn-dec"><i class="fas fa-minus"></i></button>
+                            <button class="storm-btn storm-btn-inc"><i class="fas fa-plus"></i></button>
+                        </div>
+                    </div>
+                    <div class="storm-graph-container">
+                        <canvas id="storm-graph" width="300" height="100"></canvas>
+                    </div>
+                    <div class="storm-info">
+                        <span>Амплитуда: <span id="storm-amplitude">25</span> пикс.</span>
+                    </div>
+                </div>
+
                 <!-- Блок логирования -->
                 <div class="log-panel">
                     <div class="log-header">

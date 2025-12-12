@@ -14,7 +14,7 @@ class COMInterface {
         this.handleRightStep = this.handleRightStep.bind(this);
 
         this.handleMiddleClick1 = this.handleMiddleClick1.bind(this);
-        this.handleMiddleClick2 = this.handleMiddleClick2.bind(this);
+        //this.handleMiddleClick2 = this.handleMiddleClick2.bind(this);
         this.init();
     }
 
@@ -154,30 +154,90 @@ class COMInterface {
     handleData(data) {
         if (data.startsWith('TIME:')) {
             const seconds = parseInt(data.substring(5));
-            if (!isNaN(seconds)) this.game.updateTimeFromCom(seconds);
+            if (!isNaN(seconds) && this.game) {
+                this.game.updateTimeFromCom(seconds);
+            }
         }
         else if (data.startsWith('SHIP:')) {
-            const [type, x, y] = data.substring(5).split(',').map(Number);
-            if (!isNaN(type) && !isNaN(x)) this.game.addShipFromCom(type, x, y);
+            const parts = data.substring(5).split(',');
+            const type = parseInt(parts[0]);
+            const x = parseInt(parts[1]);
+            const y = parts[2] ? parseInt(parts[2]) : null;
+            if (!isNaN(type) && !isNaN(x) && this.game) {
+                this.game.addShipFromCom(type, x, y);
+            }
         }
         else if (data.startsWith('RESULT:')) {
-            const result = data.substring(7);
-            if (result === 'MISS') {
-                this.game.handleComMiss();
-            } else if (result.startsWith('HIT:')) {
-                const points = parseInt(result.substring(4));
-                if (!isNaN(points)) this.game.handleComHit(points);
+            const payload = data.substring(7);
+            if (payload.startsWith('HIT:')) {
+                const parts = payload.substring(4).split(',');
+                const points = parseInt(parts[0]);
+                const x = parseInt(parts[1]);
+                const y = parseInt(parts[2]);
+                if (!isNaN(points) && !isNaN(x) && !isNaN(y)) {
+                    this.game.handleComHit(points, x, y);
+                }
+            } else if (payload.startsWith('MISS,')) { // Обратите внимание на запятую
+                const parts = payload.substring(5).split(',');
+                const x = parseInt(parts[0]);
+                const y = parseInt(parts[1]);
+                if (!isNaN(x) && !isNaN(y)) {
+                    this.game.handleComMiss(x, y);
+                }
             }
         }
         else if (data.startsWith('CROSSHAIR:')) {
-            const [x, y] = data.substring(10).split(',').map(Number);
-            if (!isNaN(x) && !isNaN(y)) {
-                this.game.updateCrosshairFromCom(x, y);
+            const parts = data.substring(10).split(',');
+            const x = parseInt(parts[0]);
+            if (!isNaN(x)) {
+                this.game.comCrosshairX = x; // ← сохраняем!
             }
         }
-        else if (data.startsWith('LOCK:')) {
-            const locked = data.substring(5) === '1';
-            this.game.setCrosshairLockedFromCom(locked);
+        else if (data === 'STARTED_STORM') {
+            this.game?.startStorm();
+        }
+        else if (data === 'ENDED_STORM') {
+            this.game?.endStorm();
+        }
+        else if (data.startsWith('STORM:') && !data.includes('STARTED') && !data.includes('ENDED')) {
+            const payload = data.substring(6);
+            const [xStr, yStr] = payload.split(',');
+            const x = parseInt(xStr, 10);
+            const y = parseInt(yStr, 10);
+            if (!isNaN(x) && !isNaN(y)) {
+                this.game?.setStormOffset(x, y);
+            }
+        }
+        else if (data.startsWith('STORM_AMP_UPDATED:')) {
+            const [xStr, yStr] = data.substring(19).split(',');
+            const x = parseInt(xStr);
+            const y = parseInt(yStr);
+            if (!isNaN(x) && !isNaN(y)) {
+                this.game.stormAmplitudeX = x;
+                this.game.stormAmplitudeY = y;
+                document.getElementById('storm-amplitude').textContent = x;
+            }
+        }
+        // Старые команды — для совместимости (можно удалить позже)
+        else if (data === 'CROSSHAIR_STEP_LEFT') this.handleLeftStep();
+        else if (data === 'CROSSHAIR_STEP_RIGHT') this.handleRightStep();
+        else if (data.startsWith('MIDDLE_CLICK:')) {
+            const parts = data.substring(13).split(',');
+            const x_from_com = parseInt(parts[0]);
+            const y_from_com = parseInt(parts[1]);
+            
+            if (!isNaN(x_from_com) && !isNaN(y_from_com)) {
+                this.game.comCrosshairX = x_from_com;
+                this.game.comCrosshairY = y_from_com;
+                
+                if (!this.game.crosshairLocked) {
+                    this.handleMiddleClick1();
+                } else {
+                    if (this.game.gameActive && !this.game.gamePaused) {
+                        this.game.fire(); 
+                    }
+                }
+            }
         }
     }
 
@@ -198,20 +258,30 @@ class COMInterface {
     handleMiddleClick1() {
         if (this.ui.controlMode !== 'com') return;
         if (!this.game.gameActive || this.game.gamePaused) return;
-        if (this.game.crosshairLocked) return; // уже зафиксирован — не реагируем
+        //if (this.game.crosshairLocked) return; // уже зафиксирован — не реагируем
 
         this.game.lockCrosshair();
         this.game.logMessage('COM: Прицел зафиксирован (вертикальное движение)');
     }
 
-    handleMiddleClick2() {
-        if (this.ui.controlMode !== 'com') return;
-        if (!this.game.gameActive || this.game.gamePaused) return;
-        if (!this.game.crosshairLocked) return; // выстрел только если зафиксирован
+    // handleMiddleClick2() {
+    //     if (this.ui.controlMode !== 'com') return;
+    //     if (!this.game.gameActive || this.game.gamePaused) return;
+    //     if (!this.game.crosshairLocked) return;
 
-        this.game.fire();
-        this.game.logMessage('COM: Выстрел произведён');
-    }
+    //     // Берём X и Y от STM32 (точные значения)
+    //     const logicalX = this.game.comCrosshairX;
+    //     const logicalY = this.game.comCrosshairY; // ← ИСПОЛЬЗУЕМ Y ОТ ПЛАТЫ!
+
+    //     if (logicalX === null || logicalY === null) {
+    //         console.warn('Нет данных о координатах от STM32!');
+    //         return;
+    //     }
+
+    //     // Отправляем на STM32
+    //     this.sendCommand(`SHOT:${logicalX},${logicalY}`);
+    //     this.game.logMessage(`→ Отправлен выстрел: SHOT:${logicalX},${logicalY}`);
+    // }
 
     handleStatus(statusData) {
         console.log('Статус с устройства:', statusData);

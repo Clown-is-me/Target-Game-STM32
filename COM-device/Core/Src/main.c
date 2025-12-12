@@ -1,5 +1,12 @@
 /* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file    main.c
+  * @brief   Main program body for naval game with COM-device control
+  ******************************************************************************
+  */
 /* USER CODE END Header */
+
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "dma.h"
@@ -12,12 +19,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-extern DMA_HandleTypeDef hdma_usart2_rx;  
-extern DMA_HandleTypeDef hdma_usart2_tx; 
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
+/* USER CODE END Includes */
 
+/* Private typedef -----------------------------------------------------------*/
+/* USER CODE BEGIN PTD */
+/* USER CODE END PTD */
+
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
 #define DEBOUNCE_DELAY          20
 #define CMD_LINE_SIZE           32
-#define MAX_SHIPS               30
+#define MAX_SHIPS               25
 #define FIELD_WIDTH             800
 #define FIELD_HEIGHT            600
 #define RX_BUFFER_SIZE          32
@@ -36,7 +50,14 @@ typedef struct {
     uint16_t x;
     uint16_t y;
 } Ship;
+/* USER CODE END PD */
 
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
+/* USER CODE END PM */
+
+/* Private variables ---------------------------------------------------------*/
+/* USER CODE BEGIN PV */
 // UART DMA
 extern DMA_HandleTypeDef hdma_usart2_rx;
 extern DMA_HandleTypeDef hdma_usart2_tx;
@@ -69,19 +90,32 @@ volatile uint32_t last_blink_tick = 0;
 volatile uint8_t display_on = 1;
 volatile uint32_t last_ship_spawn = 0;
 
-// Crosshair (FULL STATE ON STM32)
-volatile uint16_t crosshair_x = 400;
-volatile uint16_t crosshair_y = 300;
-volatile uint8_t crosshair_locked = 0;
-volatile int8_t vertical_direction = 1;
+// Crosshair state
+uint32_t crosshair_locked = 0;
+uint32_t crosshair_x = 400;
+uint32_t crosshair_y = 300;
+uint32_t vertical_direction = 1;
 
 // Ships
 Ship ships[MAX_SHIPS] = {0};
 
+// Storm
+volatile uint32_t last_storm_update = 0;
+const uint32_t STORM_UPDATE_INTERVAL_MS = 100; 
+volatile float storm_amplitude_x = 25.0f;      
+volatile float storm_amplitude_y = 12.0f; 
+const float STORM_PERIOD_X_MS = 2400.0f;
+const float STORM_PERIOD_Y_MS = 1900.0f;  
+// Storm activation logic
+volatile uint8_t storm_active = 1;
+/* USER CODE END PV */
 
+/* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-uint8_t is_uart_tx_ready(void);
+/* USER CODE BEGIN PFP */
+/* USER CODE END PFP */
 
+/* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
 // =============== UART / LOGGING ===============
@@ -97,14 +131,8 @@ uint8_t is_uart_tx_ready(void) {
 
 void log_to_buffer(const char* format, ...) {
     if (!logging_enabled) return;
-
-    // ??????????? ????? — ????? ??? ?????
     static char tx_buffer[128];
-
-    // ???? DMA TX ??? ???????? — ?????????? ?????????
-    if (uart_tx_busy) {
-        return;
-    }
+    if (uart_tx_busy) return;
 
     va_list args;
     va_start(args, format);
@@ -112,12 +140,10 @@ void log_to_buffer(const char* format, ...) {
     va_end(args);
     if (len <= 0) return;
 
-    // ????????? \r\n
     tx_buffer[len] = '\r';
     tx_buffer[len + 1] = '\n';
     len += 2;
 
-    // ????????????? ???? ????? ???????? DMA
     uart_tx_busy = 1;
     HAL_UART_Transmit_DMA(&huart2, (uint8_t*)tx_buffer, len);
 }
@@ -183,8 +209,8 @@ void spawn_ship(void) {
     else if (r < 80) type = 20;
     else type = 30;
 
-    uint16_t x = 40 + (get_random() % (FIELD_WIDTH - 80));
-    uint16_t y = 40 + (get_random() % (FIELD_HEIGHT - 140));
+    uint16_t x = MIN_X + (get_random() % (MAX_X - MIN_X + 1));
+    uint16_t y = MIN_Y + (get_random() % (MAX_Y - MIN_Y + 1));
 
     ships[free_slot].active = 1;
     ships[free_slot].type = type;
@@ -198,29 +224,49 @@ void check_ship_hit(uint16_t ch_x, uint16_t ch_y) {
     int hit = 0;
     uint8_t hit_type = 0;
     int hit_index = -1;
+    uint16_t hit_x = 0;
+    uint16_t hit_y = 0;
+    
     for (int i = 0; i < MAX_SHIPS; i++) {
         if (ships[i].active) {
             int dx = ch_x - ships[i].x;
             int dy = ch_y - ships[i].y;
             int dist_sq = dx * dx + dy * dy;
-            int r = (ships[i].type == 10) ? 25 :
-                    (ships[i].type == 20) ? 35 : 45;
-            if (dist_sq <= r * r) {
+            
+            int r_squared;
+            if (ships[i].type == 10) {
+                r_squared = 25 * 25; 
+            } else if (ships[i].type == 20) {
+                r_squared = 35 * 35;  
+            } else {
+                r_squared = 45 * 45;  
+            }
+            
+            if (dist_sq <= r_squared) {
                 hit = 1;
                 hit_type = ships[i].type;
                 hit_index = i;
+                hit_x = ships[i].x;
+                hit_y = ships[i].y;
                 break;
             }
         }
     }
     if (hit) {
         ships[hit_index].active = 0;
-        log_to_buffer("RESULT:HIT:%d", hit_type);
+        log_to_buffer("RESULT:HIT:%d,%d,%d", hit_type, hit_x, hit_y); 
     } else {
-        log_to_buffer("RESULT:MISS");
+        log_to_buffer("RESULT:MISS,%d,%d", ch_x, ch_y);
     }
 }
-
+// =============== STORM GENERATOR ===============
+void get_storm_offsets(int16_t* out_x, int16_t* out_y) {
+    uint32_t t = HAL_GetTick();
+    float phase_x = 2.0f * 3.14159265f * (t % (uint32_t)STORM_PERIOD_X_MS) / STORM_PERIOD_X_MS;
+    float phase_y = 2.0f * 3.14159265f * (t % (uint32_t)STORM_PERIOD_Y_MS) / STORM_PERIOD_Y_MS;
+    *out_x = (int16_t)(storm_amplitude_x * sinf(phase_x));
+    *out_y = (int16_t)(storm_amplitude_y * sinf(phase_y + 0.7f)); 
+}
 // =============== UART COMMANDS ===============
 void check_uart_commands(void) {
     static uint8_t checked_index = 0;
@@ -235,7 +281,6 @@ void check_uart_commands(void) {
             if (cmd_ready == 0 && strlen(cmd_line) > 0) {
                 cmd_ready = 1;
             }
-            // Do NOT clear here — cleared in main after handling
         } else if (strlen(cmd_line) < CMD_LINE_SIZE - 1) {
             strncat(cmd_line, (char*)&ch, 1);
         } else {
@@ -245,7 +290,7 @@ void check_uart_commands(void) {
     }
 }
 
-// =============== BUTTONS & CROSSHAIR ===============
+// =============== BUTTON HANDLING ===============
 void process_buttons(uint32_t current_time) {
     static uint32_t last_check = 0;
     if (current_time - last_check < 30) return;
@@ -257,37 +302,40 @@ void process_buttons(uint32_t current_time) {
 
     // LEFT
     if (left_button_prev == 1 && left_now == 0) {
-        if (game_started && !game_paused && !crosshair_locked) {
-            if (crosshair_x > MIN_X + CROSSHAIR_STEP_X) crosshair_x -= CROSSHAIR_STEP_X;
-            log_to_buffer("CROSSHAIR:%d,%d", crosshair_x, crosshair_y);
+        if (game_started && !game_paused) {
+						if (crosshair_x > MIN_X) {
+							crosshair_x -= CROSSHAIR_STEP_X;
+						}		  
+						log_to_buffer("CROSSHAIR_STEP_LEFT");
         }
     }
     left_button_prev = left_now;
 
     // RIGHT
     if (right_button_prev == 1 && right_now == 0) {
-        if (game_started && !game_paused && !crosshair_locked) {
-            if (crosshair_x < MAX_X - CROSSHAIR_STEP_X) crosshair_x += CROSSHAIR_STEP_X;
-            log_to_buffer("CROSSHAIR:%d,%d", crosshair_x, crosshair_y);
+        if (game_started && !game_paused) {
+            if (crosshair_x < MAX_X) {
+								crosshair_x += CROSSHAIR_STEP_X;
+						}
+						log_to_buffer("CROSSHAIR_STEP_RIGHT");
         }
     }
     right_button_prev = right_now;
 
     // MIDDLE
-    if (middle_button_prev == 1 && middle_now == 0) {
-        if (game_started && !game_paused) {
-            if (!crosshair_locked) {
-                crosshair_locked = 1;
-                log_to_buffer("LOCK:1");
-                log_to_buffer("CROSSHAIR:%d,%d", crosshair_x, crosshair_y);
-            } else {
-                crosshair_locked = 0;
-                check_ship_hit(crosshair_x, crosshair_y);
-                log_to_buffer("LOCK:0");
-                log_to_buffer("CROSSHAIR:%d,%d", crosshair_x, crosshair_y);
-            }
-        }
-    }
+		if (middle_button_prev == 1 && middle_now == 0) {
+				if (game_started && !game_paused) {
+						
+						if (!crosshair_locked) {
+								crosshair_locked = 1;
+								log_to_buffer("MIDDLE_CLICK:%d,%d", crosshair_x, crosshair_y);
+								
+						} else {
+								crosshair_locked = 0;
+								log_to_buffer("MIDDLE_CLICK:%d,%d", crosshair_x, crosshair_y);
+						}
+				}
+		}
     middle_button_prev = middle_now;
 }
 
@@ -295,40 +343,30 @@ void process_buttons(uint32_t current_time) {
 void update_game_logic(uint32_t current_time) {
     if (!game_started || game_paused) return;
 
-    // Spawn ships
-    if (current_time - last_ship_spawn >= 2000) {
+    // Spawn ships every 2 seconds
+    if (current_time - last_ship_spawn >= 4000) {
         last_ship_spawn = current_time;
         spawn_ship();
     }
 
-    // Timer
+    // Timer tick every second
     if (current_time - last_second_tick >= 1000) {
         last_second_tick = current_time;
         if (game_time > 0) {
             game_time--;
             log_to_buffer("TIME:%d", game_time);
             if (game_time == 0) {
-                game_started = 0;
+								game_started = 0;
             }
         }
     }
-
-    // Vertical movement
-    if (crosshair_locked) {
-        crosshair_y += vertical_direction * CROSSHAIR_STEP_Y;
-        if (crosshair_y <= MIN_Y) {
-            crosshair_y = MIN_Y;
-            vertical_direction = 1;
-        } else if (crosshair_y >= MAX_Y) {
-            crosshair_y = MAX_Y;
-            vertical_direction = -1;
-        }
-
-        static uint32_t last_pos_send = 0;
-        if (current_time - last_pos_send >= 80) {
-            last_pos_send = current_time;
-            log_to_buffer("CROSSHAIR:%d,%d", crosshair_x, crosshair_y);
-        }
+		
+		// Storm logic
+		if (current_time - last_storm_update >= STORM_UPDATE_INTERVAL_MS) {
+        last_storm_update = current_time;
+        int16_t sx, sy;
+        get_storm_offsets(&sx, &sy);
+        log_to_buffer("STORM:%d,%d", sx, sy);
     }
 }
 
@@ -338,8 +376,7 @@ void handle_commands(void) {
     cmd_ready = 0;
     char *cmd = cmd_line;
 
-    if (strncmp(cmd, "CMD:START", 9) == 0) {
-        game_time = 60;
+    if (strncmp(cmd, "CMD:START", 9) == 0) {	
         game_started = 1;
         game_paused = 0;
         crosshair_locked = 0;
@@ -351,16 +388,17 @@ void handle_commands(void) {
         last_second_tick = HAL_GetTick();
         log_to_buffer("COM: START=%d, PAUSE=%d", game_started, game_paused);
         log_to_buffer("TIME:%d", game_time);
-        log_to_buffer("CROSSHAIR:%d,%d", crosshair_x, crosshair_y);
-        log_to_buffer("LOCK:0");
     }
     else if (strncmp(cmd, "CMD:PAUSE", 9) == 0) {
         game_started = 1;
         game_paused = !game_paused;
+				if (!game_paused) {
+						last_second_tick = HAL_GetTick();
+				}
         log_to_buffer("COM: START=%d, PAUSE=%d", game_started, game_paused);
     }
     else if (strncmp(cmd, "CMD:RESET", 9) == 0) {
-        game_started = 0;
+				game_started = 0;
         game_paused = 0;
         game_time = 60;
         crosshair_locked = 0;
@@ -369,9 +407,36 @@ void handle_commands(void) {
         for (int i = 0; i < MAX_SHIPS; i++) ships[i].active = 0;
         log_to_buffer("COM: reset=1");
         log_to_buffer("TIME:%d", game_time);
-        log_to_buffer("CROSSHAIR:%d,%d", crosshair_x, crosshair_y);
-        log_to_buffer("LOCK:0");
     }
+    else if (strncmp(cmd, "CMD:SHOT:", 9) == 0) {
+				char *comma = strchr(cmd + 9, ',');
+				if (comma) {
+						uint16_t x = atoi(cmd + 9);      
+						uint16_t y = atoi(comma + 1);      
+						check_ship_hit(x, y);
+						crosshair_locked = 0;             
+				}
+		}
+		else if (strncmp(cmd, "CMD:STORM_UPDATE:", 17) == 0) {
+				char* comma = strchr(cmd + 17, ',');
+				if (comma) {
+						int16_t delta_x = atoi(cmd + 17);
+						int16_t delta_y = atoi(comma + 1);
+
+						int16_t new_x = (int16_t)storm_amplitude_x + delta_x * 5;
+						int16_t new_y = (int16_t)storm_amplitude_y + delta_y * 5;
+
+						if (new_x < 0) new_x = 0;
+						if (new_x > 50) new_x = 50;
+						if (new_y < 0) new_y = 0;
+						if (new_y > 50) new_y = 50;
+
+						storm_amplitude_x = (float)new_x;
+						storm_amplitude_y = (float)new_y;
+
+						log_to_buffer("STORM_AMP_UPDATED:%d,%d", new_x, new_y);
+				}
+		}
     else {
         log_to_buffer("COM: unknown cmd: %s", cmd);
     }
@@ -386,42 +451,48 @@ void handle_commands(void) {
   */
 int main(void)
 {
-		HAL_Init();
-		SystemClock_Config();
-		MX_GPIO_Init();
-		MX_DMA_Init();
-		MX_TIM2_Init();
-		MX_USART2_UART_Init();
-		HAL_UART_Receive_DMA(&huart2, rx_dma_buffer, RX_BUFFER_SIZE);
-		HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
-		last_second_tick = HAL_GetTick();
-		last_blink_tick = HAL_GetTick();
-		
-		uint32_t last_button_check = 0;
-		uint32_t last_second_tick = 0;
-		uint32_t last_blink_tick = 0;
-		while (1)
-		{
-				uint32_t current_time = HAL_GetTick();
+    /* MCU Configuration--------------------------------------------------------*/
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_DMA_Init();
+    MX_TIM2_Init();
+    MX_USART2_UART_Init();
 
-				check_uart_commands();
-				handle_commands();
-				process_buttons(current_time);
-				update_game_logic(current_time);
+    /* Initialize UART DMA */
+    HAL_UART_Receive_DMA(&huart2, rx_dma_buffer, RX_BUFFER_SIZE);
 
-				// Display blink on pause
-				if (game_started && game_paused) {
-						if (current_time - last_blink_tick >= 500) {
-								last_blink_tick = current_time;
-								display_on = !display_on;
-						}
-				} else {
-						display_on = 1;
-				}
+    /* Initial state */
+    HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
+    last_second_tick = HAL_GetTick();
+    last_blink_tick = HAL_GetTick();
 
-				updateDisplay();
-		}
+    /* Infinite loop */
+    while (1)
+    {
+        uint32_t current_time = HAL_GetTick();
 
+        // =============== SERIAL COMMUNICATION ===============
+        check_uart_commands();
+        handle_commands();
+
+        // =============== INPUT HANDLING ===============
+        process_buttons(current_time);
+
+        // =============== GAME LOGIC ===============
+        update_game_logic(current_time);
+
+        // =============== DISPLAY ===============
+        if (game_started && game_paused) {
+            if (current_time - last_blink_tick >= 500) {
+                last_blink_tick = current_time;
+                display_on = !display_on;
+            }
+        } else {
+            display_on = 1;
+        }
+        updateDisplay();
+    }
 }
 
 /**
@@ -430,40 +501,29 @@ int main(void)
   */
 void SystemClock_Config(void)
 {
-  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL16;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+    RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
+    RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL16;
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+        Error_Handler();
+    }
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
-  {
-    Error_Handler();
-  }
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                                |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
+        Error_Handler();
+    }
 }
-
-/* USER CODE BEGIN 4 */
-/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.
@@ -471,9 +531,10 @@ void SystemClock_Config(void)
   */
 void Error_Handler(void)
 {
-  /* USER CODE BEGIN Error_Handler_Debug */
-  /* USER CODE END Error_Handler_Debug */
+    /* USER CODE BEGIN Error_Handler_Debug */
+    /* USER CODE END Error_Handler_Debug */
 }
+
 #ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
@@ -484,7 +545,7 @@ void Error_Handler(void)
   */
 void assert_failed(uint8_t *file, uint32_t line)
 {
-  /* USER CODE BEGIN 6 */
-  /* USER CODE END 6 */
+    /* USER CODE BEGIN 6 */
+    /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

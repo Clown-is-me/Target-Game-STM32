@@ -12,7 +12,12 @@ class ShipGame {
         this.crosshairSpeed = 6; // Скорость движения прицела
         this.crosshairVerticalSpeed = 3;
         this.crosshairVerticalDirection = 1;
+        this.comCrosshairX = null;
+        this.comCrosshairY = null; // ← новая переменная
         this.useComTimer = false; // Управление таймером через COM
+        // --- Комбо ---
+        this.comboCount = 0;
+        this.comboSound = null; // будем инициализировать позже
         
         // Управление (используется InputHandler)
         this.moveLeft = false;
@@ -46,7 +51,18 @@ class ShipGame {
         
         // Массив кораблей
         this.ships = [];
-        
+        // --- Шторм ---
+        this.stormOffsetX = 0;
+        this.stormOffsetY = 0;
+        this.stormAmplitudeX = 25;
+        this.stormAmplitudeY = 12;
+        // Визуализация шторма
+        this.stormHistory = new Array(200).fill(0); // буфер из 200 точек
+        this.stormHistoryIndex = 0;                 // указатель на текущую позицию
+        this.stormGraphCanvas = document.getElementById('storm-graph');
+        this.stormGraphCtx = this.stormGraphCanvas ? this.stormGraphCanvas.getContext('2d') : null;
+        this.stormActive = false;
+
         // Таймеры
         this.gameTimer = null;
         this.crosshairMoveTimer = null;
@@ -56,7 +72,11 @@ class ShipGame {
         // Привязка контекста только для тех методов, которые существуют
         this.updateFieldSize = this.updateFieldSize.bind(this);
         
+        this.logicalCrosshairX = this.fieldWidth / 2;
+        this.logicalCrosshairY = this.fieldHeight / 2;
+
         this.init();
+        this.initComboSound();
     }
     
     init() {
@@ -73,6 +93,37 @@ class ShipGame {
         // Логирование
         this.logMessage('Система инициализирована');
         this.logMessage('Гарнизон готов к патрулю');
+
+        if (this.stormGraphCtx) {
+            this.redrawStormGraph(); // стартовый график (нулевая линия)
+        }
+    }
+
+    initComboSound() {
+        // Создаём короткий "ding"-звук с помощью Web Audio API (без внешних файлов)
+        try {
+            const context = new (window.AudioContext || window.webkitAudioContext)();
+            this.comboSound = () => {
+                const oscillator = context.createOscillator();
+                const gain = context.createGain();
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, context.currentTime); // A5
+                oscillator.frequency.exponentialRampToValueAtTime(1760, context.currentTime + 0.1); // вверх
+
+                gain.gain.setValueAtTime(0.3, context.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 0.3);
+
+                oscillator.connect(gain);
+                gain.connect(context.destination);
+
+                oscillator.start();
+                oscillator.stop(context.currentTime + 0.3);
+            };
+        } catch (e) {
+            console.warn('Не удалось инициализировать звук комбо:', e);
+            this.comboSound = null;
+        }
     }
 
     enableKeyboard() {
@@ -103,11 +154,10 @@ class ShipGame {
     }
     
     resetCrosshair() {
-        const x = this.fieldWidth / 2;
-        const y = this.fieldHeight / 2;
-        this.crosshair.style.left = `${x}px`;
-        this.crosshair.style.top = `${y}px`;
+        this.logicalCrosshairX = this.fieldWidth / 2;
+        this.logicalCrosshairY = this.fieldHeight / 2;
         this.crosshairLocked = false;
+        this.updateCrosshairVisualPosition(); // обновляем визуал
         this.updateCrosshairState();
     }
     
@@ -241,15 +291,19 @@ class ShipGame {
         // Размеры для позиционирования
         const size = shipClass === 'small' ? 50 :
                     shipClass === 'medium' ? 70 : 90;
+        const halfSize = size / 2;
         const maxX = this.fieldWidth - size - 40;
         const maxY = this.fieldHeight - size - 100;
-
-        // Ограничиваем координаты
-        const finalX = Math.max(20, Math.min(maxX, x));
-        const finalY = y !== null ? Math.max(20, Math.min(maxY, y)) : (20 + Math.random() * maxY);
-
+        // Ограничиваем координаты центра
+        const centerX = Math.max(halfSize + 20, Math.min(this.fieldWidth - halfSize - 20, x));
+        const centerY = y !== null ? Math.max(halfSize + 20, Math.min(this.fieldHeight - halfSize - 20, y)) : 
+                        (halfSize + 20 + Math.random() * (this.fieldHeight - 2 * halfSize - 40));
+        // Смещаем left и top, чтобы центр был в (centerX, centerY)
+        const finalX = centerX - halfSize;
+        const finalY = centerY - halfSize;
         ship.style.left = `${finalX}px`;
-        ship.style.top = `${finalY}px`;
+        ship.style.top = `${finalY}px`;;
+
         this.gameField.appendChild(ship);
 
         const shipData = { element: ship, points, x: finalX, y: finalY };
@@ -264,83 +318,147 @@ class ShipGame {
         }, 500);
 
         // Автоудаление с анимацией
-        setTimeout(() => {
-            if (!this.gameActive || this.gamePaused) {
-                return; // Не удаляем, если игра на паузе или завершена
-            }
-            if (ship.parentNode) {
-                ship.classList.add('hit'); // Добавляем класс для анимации исчезновения
-                setTimeout(() => {
-                    if (ship.parentNode && this.gameActive && !this.gamePause ) {
-                        ship.remove();
-                    }
-                }, 300);
-                const index = this.ships.findIndex(s => s.element === ship);
-                if (index !== -1) this.ships.splice(index, 1);
-            }
-        }, 15000);
+        // setTimeout(() => {
+        //     if (!this.gameActive || this.gamePaused) {
+        //         return; // Не удаляем, если игра на паузе или завершена
+        //     }
+        //     if (ship.parentNode) {
+        //         ship.classList.add('hit'); // Добавляем класс для анимации исчезновения
+        //         setTimeout(() => {
+        //             if (ship.parentNode && this.gameActive && !this.gamePause ) {
+        //                 ship.remove();
+        //             }
+        //         }, 300);
+        //         const index = this.ships.findIndex(s => s.element === ship);
+        //         if (index !== -1) this.ships.splice(index, 1);
+        //     }
+        // }, 15000);
     }
-
-    // Устанавливает позицию прицела из COM (в логических координатах 0–800 × 0–600)
-    updateCrosshairFromCom(logicalX, logicalY) {
-        // Обязательно: обновить размеры поля, если ещё не сделано
-        if (!this.fieldRect) this.updateFieldSize();
-        
-        // Преобразуем логические координаты (0–800 × 0–600) в пиксели
-        const scaleX = this.fieldWidth / 800;
-        const scaleY = this.fieldHeight / 600;
-        const pixelX = logicalX * scaleX;
-        const pixelY = logicalY * scaleY;
-        
-        // Применяем позицию
-        this.crosshair.style.left = `${pixelX}px`;
-        this.crosshair.style.top = `${pixelY}px`;
-    }
-
-    setCrosshairLockedFromCom(locked) {
-        this.crosshairLocked = locked;
-        this.updateCrosshairState();
-    }
-
-    // Обработка промаха от COM
-    handleComMiss() {
-        if (!this.gameActive || this.gamePaused) return;
+    
+    // Обработка промаха с координатами
+    handleComMiss(x, y) {
+        if (!this.gameActive || !this.useComTimer) return;
         this.shots++;
-        this.createMissEffect();
-        this.logMessage('Промах! (от COM)');
-        this.crosshairLocked = false;
-        this.updateCrosshairState();
+        // Преобразуем логические координаты (0–800) → пиксели
+        const pixelX = Math.round(x * (this.fieldWidth / 800));
+        const pixelY = Math.round(y * (this.fieldHeight / 600));
+        this.createMissEffectAt(pixelX, pixelY);
+        this.logMessage('Промах с COM-устройства');
         this.updateUI();
+        // Снимаем фиксацию
+        this.crosshairLocked = false;
+        this.stopCrosshairAutoMove();
+        this.updateCrosshairState();
     }
 
-    handleComHit(points) {
-        if (!this.gameActive || this.gamePaused) return;
+    // Обработка попадания с координатами
+    handleComHit(points, shipX, shipY) {
+        if (!this.gameActive || !this.useComTimer) return;
+        
         this.shots++;
         this.hits++;
         this.score += points;
+        
+        // Найти корабль по координатам и типу
+        const shipElement = this.findShipByCoords(shipX, shipY, points);
+        
+        if (shipElement) {
+            // Получаем координаты центра корабля для эффекта
+            const rect = shipElement.getBoundingClientRect();
+            const fieldRect = this.gameField.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2 - fieldRect.left;
+            const centerY = rect.top + rect.height / 2 - fieldRect.top;
+            
+            // Создаем эффект попадания в центре корабля
+            this.createSplashEffectAt(centerX, centerY);
+            
+            // Удалить корабль
+            shipElement.classList.add('hit');
+            setTimeout(() => {
+                if (shipElement.parentNode) {
+                    shipElement.remove();
+                }
+            }, 800);
+            
+            // Удалить из массива
+            const index = this.ships.findIndex(s => s.element === shipElement);
+            if (index !== -1) {
+                this.ships.splice(index, 1);
+            }
+        } else {
+            // Если не нашли — создаем эффект промаха
+            const pixelX = Math.round(shipX * (this.fieldWidth / 800));
+            const pixelY = Math.round(shipY * (this.fieldHeight / 600));
+            this.createMissEffectAt(pixelX, pixelY);
+        }
+        
         const shipName = this.getShipNameByPoints(points);
-        this.logMessage(`Потоплена ${shipName}! +${points} очков (от COM)`);
-        this.createSplashEffectAtCrosshair();
-        this.crosshairLocked = false;
-        this.updateCrosshairState();
+        const logMessage = shipElement ? 
+            `Попадание с COM: потоплена ${shipName}! +${points} очков` :
+            `Промах с COM по координатам (${shipX},${shipY})`;
+        
+        this.logMessage(logMessage);
         this.updateUI();
+        this.crosshairLocked = false;
+        this.stopCrosshairAutoMove();
+        this.updateCrosshairState();
     }
 
-    createSplashEffectAtCrosshair() {
-        const crosshairRect = this.crosshair.getBoundingClientRect();
-        const fieldRect = this.gameField.getBoundingClientRect();
+    findShipByCoords(x, y, points) {
+        // Преобразуем логические координаты STM32 (0-800, 0-600) в пиксели на экране
+        const pixelX = Math.round(x * (this.fieldWidth / 800));
+        const pixelY = Math.round(y * (this.fieldHeight / 600));
+        
+        // Находим корабль, который ближе всего к этим координатам
+        let closestShip = null;
+        let minDistance = Infinity;
+        
+        for (const ship of this.ships) {
+            const rect = ship.element.getBoundingClientRect();
+            const fieldRect = this.gameField.getBoundingClientRect();
+            
+            // Вычисляем центр корабля в координатах относительно игрового поля
+            const shipCenterX = rect.left + rect.width / 2 - fieldRect.left;
+            const shipCenterY = rect.top + rect.height / 2 - fieldRect.top;
+            
+            // Вычисляем расстояние
+            const distance = Math.sqrt(
+                Math.pow(shipCenterX - pixelX, 2) + 
+                Math.pow(shipCenterY - pixelY, 2)
+            );
+            
+            // Проверяем, совпадают ли очки и расстояние достаточно мало
+            const radius = ship.points === 10 ? 25 : 
+                        ship.points === 20 ? 35 : 45;
+            
+            if (ship.points === points && distance <= radius && distance < minDistance) {
+                minDistance = distance;
+                closestShip = ship.element;
+            }
+        }
+        
+        return closestShip;
+    }
+
+    createMissEffectAt(x, y) {
+        const ripple = document.createElement('div');
+        ripple.className = 'splash';
+        ripple.style.background = 'radial-gradient(circle, white 0%, rgba(130, 185, 191, 0.7) 100%)';
+        ripple.style.left = `${x - 20}px`;
+        ripple.style.top = `${y - 20}px`;
+        this.gameField.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 600);
+    }
+
+    createSplashEffectAt(x, y) {
         const splash = document.createElement('div');
         splash.className = 'splash';
-        const x = crosshairRect.left + crosshairRect.width / 2 - fieldRect.left;
-        const y = crosshairRect.top + crosshairRect.height / 2 - fieldRect.top;
         splash.style.left = `${x - 20}px`;
         splash.style.top = `${y - 20}px`;
         this.gameField.appendChild(splash);
-        setTimeout(() => {
-            if (splash.parentNode) splash.remove();
-        }, 600);
+        setTimeout(() => splash.remove(), 600);
     }
-    
+
     spawnShip() {
         if (!this.gameActive || this.gamePaused) return;
         
@@ -428,11 +546,8 @@ class ShipGame {
     // Исправленный метод updateCrosshairPosition
     updateCrosshairPosition() {
         if (!this.gameActive || this.gamePaused || this.crosshairLocked) return;
-        
-        // Проверяем, нужно ли двигать прицел
         let shouldMove = false;
         let moveDirection = 0;
-        
         if (this.moveLeft && !this.moveRight) {
             moveDirection = -1;
             shouldMove = true;
@@ -440,23 +555,18 @@ class ShipGame {
             moveDirection = 1;
             shouldMove = true;
         }
-        
         if (shouldMove) {
-            const currentLeft = parseInt(this.crosshair.style.left) || this.fieldWidth / 2;
-            const newLeft = currentLeft + (moveDirection * this.crosshairSpeed);
-            
-            // Ограничиваем движение в пределах поля
+            const newLeft = this.logicalCrosshairX + (moveDirection * this.crosshairSpeed);
             const minX = 40;
             const maxX = this.fieldWidth - 40;
-            
             if (newLeft >= minX && newLeft <= maxX) {
-                this.crosshair.style.left = `${newLeft}px`;
+                this.logicalCrosshairX = newLeft;
             }
+            this.updateCrosshairVisualPosition(); // обновляем визуал
         }
     }
     
     lockCrosshair() {
-        if (this.useComTimer) return;
         if (!this.gameActive || this.gamePaused || this.crosshairLocked) return;
         
         this.crosshairLocked = true;
@@ -468,8 +578,112 @@ class ShipGame {
         this.startCrosshairAutoMove();
     }
     
+    startStorm() {
+        this.stormActive = true;
+        this.stormHistory.fill(0);
+        this.stormHistoryIndex = 0;
+        this.logMessage('Шторм начался!');
+        this.redrawStormGraph();
+    }
+
+    endStorm() {
+        this.stormActive = false;
+        this.stormOffsetX = 0;
+        this.stormOffsetY = 0;
+        this.stormHistory.fill(0);
+        this.stormHistoryIndex = 0;
+        this.updateCrosshairVisualPosition();
+        this.redrawStormGraph();
+        this.logMessage('Шторм прекратился.');
+    }
+
+    setStormOffset(x, y) {
+        //if (!this.stormActive) return; // ← ключевая строка!
+        this.stormOffsetX = x || 0;
+        this.stormOffsetY = y || 0;
+        if (this.stormHistory) {
+            this.stormHistory[this.stormHistoryIndex] = this.stormOffsetX;
+            this.stormHistoryIndex = (this.stormHistoryIndex + 1) % this.stormHistory.length;
+        }
+        this.updateCrosshairVisualPosition();
+        this.redrawStormGraph();
+    }
+
+    redrawStormGraph() {
+        if (!this.stormGraphCtx || !this.stormGraphCanvas) return;
+
+        const ctx = this.stormGraphCtx;
+        const canvas = this.stormGraphCanvas;
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Очистка
+        ctx.clearRect(0, 0, width, height);
+
+        // Параметры
+        const maxAmplitude = 50;
+        const centerY = height / 2;
+        const pixelsPerUnit = (height / 2) / maxAmplitude; // сколько пикселей на 1 единицу
+
+        // === Горизонтальные линии уровней (без подписей) ===
+        ctx.strokeStyle = 'rgba(130, 185, 191, 0.15)';
+        ctx.lineWidth = 1;
+        const step = 10;
+        for (let val = -maxAmplitude; val <= maxAmplitude; val += step) {
+            if (val === 0) continue; // ноль — отдельно
+            const y = centerY - val * pixelsPerUnit;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+
+        // Центральная линия (ноль)
+        ctx.strokeStyle = 'rgba(130, 185, 191, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, centerY);
+        ctx.lineTo(width, centerY);
+        ctx.stroke();
+
+        // === Сплошной график (реальные данные из stormHistory) ===
+        if (this.stormHistory && this.stormHistory.length > 0) {
+            ctx.strokeStyle = '#82b9bf';
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+
+            const historyLength = this.stormHistory.length;
+            const startIndex = (this.stormHistoryIndex - historyLength + historyLength) % historyLength;
+
+            for (let i = 0; i < historyLength; i++) {
+                const dataIndex = (startIndex + i) % historyLength;
+                const value = this.stormHistory[dataIndex];
+                const x = (i / (historyLength - 1)) * width;
+                const y = centerY - value * pixelsPerUnit;
+
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        // === Обновляем только внешнюю подпись под графиком (без "Амплитуда:") ===
+        const ampDisplay = document.getElementById('storm-amplitude');
+        if (ampDisplay) {
+            ampDisplay.textContent = `${this.stormAmplitudeX || 25} пикс.`;
+        }
+    }
+
+    updateCrosshairVisualPosition() {
+        const visualX = this.logicalCrosshairX + this.stormOffsetX;
+        const visualY = this.logicalCrosshairY + this.stormOffsetY;
+        this.crosshair.style.left = `${visualX}px`;
+        this.crosshair.style.top = `${visualY}px`;
+    }
+
     startCrosshairAutoMove() {
-        if (this.useComTimer) return;
         if (this.crosshairMoveTimer) {
             clearInterval(this.crosshairMoveTimer);
         }
@@ -481,12 +695,18 @@ class ShipGame {
             }
             
             // Движение по вертикали (вверх-вниз)
-            const currentTop = parseInt(this.crosshair.style.top) || this.fieldHeight / 2;
-            let newTop = currentTop + (this.crosshairVerticalDirection * this.crosshairVerticalSpeed);
-            
-            // Меняем направление при достижении границы
+            let newTop = this.logicalCrosshairY + (this.crosshairVerticalDirection * this.crosshairVerticalSpeed);
             const minY = 40;
             const maxY = this.fieldHeight - 40;
+            if (newTop <= minY) {
+                newTop = minY;
+                this.crosshairVerticalDirection = 1;
+            } else if (newTop >= maxY) {
+                newTop = maxY;
+                this.crosshairVerticalDirection = -1;
+            }
+            this.logicalCrosshairY = newTop;
+            this.updateCrosshairVisualPosition();
             
             if (newTop <= minY) {
                 newTop = minY;
@@ -508,22 +728,19 @@ class ShipGame {
     }
 
     stepCrosshair(direction) {
-        if (this.useComTimer) return;
         if (!this.gameActive || this.gamePaused || this.crosshairLocked) return;
-        const step = 25; // пикселей за шаг
-        const currentLeft = parseInt(this.crosshair.style.left) || this.fieldWidth / 2;
-        const newLeft = currentLeft + (direction * step);
+        const step = 25;
+        const newLeft = this.logicalCrosshairX + (direction * step);
         const minX = 40;
         const maxX = this.fieldWidth - 40;
         if (newLeft >= minX && newLeft <= maxX) {
-            this.crosshair.style.left = `${newLeft}px`;
+            this.logicalCrosshairX = newLeft;
+            this.updateCrosshairVisualPosition();
         }
     }
     
     fire() {
-        if (this.useComTimer) return;
         if (!this.gameActive || this.gamePaused || !this.crosshairLocked) return;
-        console.log('Кораблей в массиве:', this.ships.length);
         this.shots++;
         const hit = this.checkHit();
         if (hit) {
@@ -531,6 +748,7 @@ class ShipGame {
         } else {
             this.createMissEffect();
             this.logMessage('Промах!');
+            this.comboCount = 0; 
         }
         this.crosshairLocked = false;
         this.stopCrosshairAutoMove();
@@ -538,6 +756,15 @@ class ShipGame {
         this.updateUI();
     }
     
+    triggerCombo() {
+        this.comboCount = 0; // сбрасываем после триггера
+        if (this.comboSound) {
+            this.comboSound();
+        }
+        this.logMessage('🔥 Комбо! 5 попаданий подряд!');
+        // Опционально: визуальный эффект или анимация
+    }
+
     checkHit() {
         const crosshairRect = this.crosshair.getBoundingClientRect();
         const crosshairCenterX = crosshairRect.left + crosshairRect.width / 2;
@@ -576,7 +803,10 @@ class ShipGame {
         // Добавляем очки
         this.score += shipData.points;
         this.hits++;
-        
+        this.comboCount++;
+        if (this.comboCount >= 5) {
+            this.triggerCombo();
+        }
         // Логируем попадание
         const shipName = this.getShipNameByPoints(shipData.points);
         this.logMessage(`Потоплена ${shipName}! +${shipData.points} очков`);
@@ -714,10 +944,10 @@ class ShipGame {
             'COM',
             'Курс зафиксирован',
             'Журнал очищен',
-            'Ошибка'
+            'Ошибка',
         ];
 
-        const isSystemMessage = systemKeywords.some(keyword => message.includes(keyword) && !message.includes("TIME"));
+        const isSystemMessage = systemKeywords.some(keyword => message.includes(keyword) && !message.includes("TIME") && !message.includes("STORM:") && !message.includes("SHIP:"));
 
         if (isSystemMessage) {
             console.log(`[Журнал] ${message}`);

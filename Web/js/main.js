@@ -30,13 +30,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
+    /// --- УПРАВЛЕНИЕ АМПЛИТУДОЙ ШТОРМА (НОВАЯ ЛОГИКА) ---
+    document.querySelector('.storm-btn-inc')?.addEventListener('click', () => {
+        if (!ui.comInterface?.connected) {
+            game.logMessage('COM не подключён — изменение амплитуды недоступно');
+            return;
+        }
+        const axis = document.querySelector('input[name="storm-axis"]:checked')?.value || 'x';
+        let dx = 0, dy = 0;
+        if (axis === 'x') dx = 1;
+        else dy = 1;
+        ui.comInterface.sendCommand(`STORM_UPDATE:${dx},${dy}`);
+    });
+
+    document.querySelector('.storm-btn-dec')?.addEventListener('click', () => {
+        if (!ui.comInterface?.connected) {
+            game.logMessage('COM не подключён — изменение амплитуды недоступно');
+            return;
+        }
+        const axis = document.querySelector('input[name="storm-axis"]:checked')?.value || 'x';
+        let dx = 0, dy = 0;
+        if (axis === 'x') dx = -1;
+        else dy = -1;
+        ui.comInterface.sendCommand(`STORM_UPDATE:${dx},${dy}`);
+    });
+
     // Очистка лога
     document.querySelector('.log-clear').addEventListener('click', () => {
         const logContent = document.querySelector('.log-content');
         logContent.innerHTML = '';
         game.logMessage('Журнал очищен');
     });
-    
+     
     // Экспорт для отладки
     window.game = game;
     window.ui = ui;
